@@ -27,6 +27,9 @@
     "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.1.0",
+    "@ant-design/pro-layout": "^7.22.7",
+    "antd": "^6.3.2",
     "dayjs": "^1.11.13",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

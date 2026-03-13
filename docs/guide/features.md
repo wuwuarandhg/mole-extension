@@ -13,7 +13,7 @@ Mole works just like its namesake: after you ask a question, it burrows undergro
 Mole injects a floating ball on every webpage as the entry point for AI interaction.
 
 - **Shadow DOM isolation** — The floating ball's styles are fully isolated within Shadow DOM, never affecting or being affected by the host page's styles
-- **Keyboard shortcut** — `Cmd+E` (Mac) / `Ctrl+E` (Windows) to quickly summon the search box
+- **Keyboard shortcut** — `Cmd+M` (Mac) / `Ctrl+M` (Windows) to quickly summon the search box
 - **Drag to reposition** — The floating ball can be dragged anywhere on screen; position persists to `chrome.storage.local`
 - **Edge-hugging** — Capsule shape hugs the screen edge, slides out on hover, never disrupts normal browsing
 - **Streaming responses** — AI replies stream in real time, showing the thinking process and tool call status

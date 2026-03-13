@@ -60,6 +60,22 @@ void ensureToolRegistryReady().catch((err) => {
     console.warn('[Mole] 初始化动态工具失败:', err);
 });
 
+/**
+ * 扩展首次安装时，检测是否已配置 AI 设置
+ * 若未配置则自动打开 options 页引导用户完成初始化
+ */
+chrome.runtime.onInstalled.addListener((details) => {
+    if (details.reason === 'install') {
+        chrome.storage.local.get('mole_ai_settings', (result) => {
+            const settings = result['mole_ai_settings'];
+            const hasConfig = settings && (settings.apiKey || settings.endpoint);
+            if (!hasConfig) {
+                chrome.runtime.openOptionsPage();
+            }
+        });
+    }
+});
+
 // ============ SessionManager：会话集中管理 ============
 
 /** 会话存储 */

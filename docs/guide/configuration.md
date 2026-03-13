@@ -65,7 +65,7 @@ Dynamic tools also support batch import via Manifest URL.
 
 | Shortcut | Function |
 |----------|----------|
-| `Cmd+E` / `Ctrl+E` | Toggle AI search box |
+| `Cmd+M` / `Ctrl+M` | Toggle AI search box |
 
 ::: tip
 Keyboard shortcuts work on all webpages. If there's a conflict with a page's own shortcuts, use the floating ball to open instead.

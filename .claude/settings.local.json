@@ -67,7 +67,9 @@
       "Bash(git config credential.helper)",
       "Bash(ssh-keygen -lf ~/.ssh/id_rsa.pub)",
       "Bash(ssh -T git@github.com 2>&1 || true)",
-      "Bash(git remote set-url origin git@github.com:clark-maybe/mole-extension.git && git push origin main)"
+      "Bash(git remote set-url origin git@github.com:clark-maybe/mole-extension.git && git push origin main)",
+      "Bash(grep -o 'Sider\\\\|Layout\\\\|ConfigProvider\\\\|useApp\\\\|Timeline' /Users/clark/MySpace/mole-extension/build_version/mole-extension_1.0.0/assets/options-*.js | head -20)",
+      "Bash(grep -c 'debug-shell\\\\|mode-switch\\\\|mode-btn\\\\|workspace-grid\\\\|card-list\\\\|history-timeline' /Users/clark/MySpace/mole-extension/build_version/mole-extension_1.0.0/assets/options-*.js)"
     ],
     "deny": [],
     "ask": []

@@ -55,7 +55,7 @@ Mole is compatible with any OpenAI API-format service, including but not limited
 
 After configuration, visit any webpage:
 
-- **Keyboard shortcut**: Press `Cmd+E` (Mac) or `Ctrl+E` (Windows/Linux) to summon the search box
+- **Keyboard shortcut**: Press `Cmd+M` (Mac) or `Ctrl+M` (Windows/Linux) to summon the search box
 - **Floating ball**: A capsule-shaped floating ball appears on the right side of the page — hover to slide out, click to open
 
 ## Basic Interaction

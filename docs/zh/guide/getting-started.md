@@ -54,7 +54,7 @@ Mole 兼容任何 OpenAI API 格式的服务，包括但不限于：OpenAI、Azu
 ### 唤起 AI 助手
 配置完成后，访问任意网页：
 
-- **快捷键**：按 `Cmd+E`（Mac）或 `Ctrl+E`（Windows/Linux）唤起搜索框
+- **快捷键**：按 `Cmd+M`（Mac）或 `Ctrl+M`（Windows/Linux）唤起搜索框
 - **悬浮球**：页面右侧会出现一个贴边的悬浮球，hover 滑出，点击即可唤起
 
 ## 基本交互

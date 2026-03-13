@@ -1,7 +1,7 @@
 /**
  * Mole 悬浮胶囊模块
  * 胶囊形态贴边微隐藏，hover 滑出露出快捷键提示
- * 点击或快捷键（⌘E / Ctrl+E）弹出全局搜索框
+ * 点击或快捷键（⌘M / Ctrl+M）弹出全局搜索框
  * 搜索框接入 AI 对话，支持流式响应和函数调用状态展示
  * 使用 Shadow DOM 隔离样式
  */
@@ -42,7 +42,7 @@ interface RecentCompletedTaskItem {
 
 // 平台检测
 const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-const SHORTCUT_TEXT = isMac ? '⌘ E' : 'Ctrl E';
+const SHORTCUT_TEXT = isMac ? '⌘ M' : 'Ctrl M';
 
 // 网页查看 logo（放大镜+页面）
 const LOGO_PAGE_VIEWER = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M490.666667 384c-58.88 0-106.666667 47.786667-106.666667 106.666667s47.786667 106.666667 106.666667 106.666666 106.666667-47.786667 106.666666-106.666666-47.786667-106.666667-106.666666-106.666667zM853.333333 170.666667H170.666667c-47.146667 0-85.333333 38.186667-85.333334 85.333333v512c0 47.146667 38.186667 85.333333 85.333334 85.333333h682.666666c47.146667 0 85.333333-38.186667 85.333334-85.333333V256c0-47.146667-38.186667-85.333333-85.333334-85.333333z m-136.746666 606.08l-123.946667-123.946667c-29.653333 18.773333-64.426667 29.866667-101.973333 29.866667a192 192 0 1 1 192-192c0 37.546667-11.093333 72.32-29.866667 101.76l124.16 123.733333-60.373333 60.586667z" fill="#0071e3"/></svg>')}`;
@@ -5714,10 +5714,10 @@ export const initFloatBall = async () => {
     }
   });
 
-  // 全局快捷键：Cmd+E (Mac) / Ctrl+E (Win) 唤起/关闭搜索框
+  // 全局快捷键：Cmd+M (Mac) / Ctrl+M (Win) 唤起/关闭搜索框
   document.addEventListener('keydown', (e) => {
     const modKey = isMac ? e.metaKey : e.ctrlKey;
-    if (modKey && e.key.toLowerCase() === 'e') {
+    if (modKey && e.key.toLowerCase() === 'm') {
       e.preventDefault();
       e.stopPropagation();
       toggleSearch();
