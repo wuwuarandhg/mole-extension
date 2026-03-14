@@ -2330,11 +2330,15 @@ const getStyles = () => `
   /* ===== 工作流录制 ===== */
 
   /* 录制按钮 - 放在 footer 中 */
+  /* 任务运行中/出错时隐藏录制按钮 */
+  .mole-searchbox.state-running .mole-recorder-btn,
+  .mole-searchbox.state-error .mole-recorder-btn { display: none; }
+
   .mole-recorder-btn {
     display: flex;
     align-items: center;
     gap: 5px;
-    margin-left: auto;
+    margin-left: 8px;
     padding: 4px 10px;
     border: 1px solid var(--ec-border-soft);
     border-radius: 999px;
@@ -2406,6 +2410,24 @@ const getStyles = () => `
     height: 8px;
     border-radius: 50%;
     background: var(--ec-danger);
+    animation: mole-breathe 1.4s ease-in-out infinite;
+    opacity: 1;
+    z-index: 2;
+  }
+
+  /* 胶囊审计状态（AI 生成工作流中） */
+  .mole-trigger.auditing .mole-pill {
+    border-color: rgba(0, 113, 227, 0.3);
+  }
+  .mole-trigger.auditing .mole-pill::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ec-primary-strong);
     animation: mole-breathe 1.4s ease-in-out infinite;
     opacity: 1;
     z-index: 2;
@@ -2899,6 +2921,7 @@ export const initFloatBall = async () => {
   let recorderStepCount = 0;
   let recorderStartedAt = 0;
   let isResultMarking = false;
+  let isRecorderAuditing = false;
 
   // 初始化时获取自身 tabId
   Channel.send('__get_tab_info', {}, (tabInfo: any) => {
@@ -3692,18 +3715,25 @@ export const initFloatBall = async () => {
     trigger.classList.remove('task-running', 'task-done', 'task-error');
     const state: 'idle' | 'running' | 'done' | 'error' = currentTask ? currentTask.status : 'idle';
     if (state === 'idle') {
-      const takeoverLabel = getTakeoverLabel();
-      if (takeoverLabel) {
-        trigger.classList.add('task-running');
-        shortcutEl.textContent = takeoverLabel;
-        pillMetaEl.textContent = getTakeoverMetaText();
-        clearPillNotice();
+      if (isRecorderAuditing) {
+        // AI 审计中：蓝色脉冲 + 文本提示
+        shortcutEl.textContent = 'AI 审计中';
+        pillMetaEl.textContent = '正在生成工作流...';
         trigger.classList.add('announce');
       } else {
-        shortcutEl.textContent = '';
-        pillMetaEl.textContent = `${SHORTCUT_TEXT} 打开`;
-        if (!trigger.classList.contains('notice-visible')) {
-          trigger.classList.remove('announce');
+        const takeoverLabel = getTakeoverLabel();
+        if (takeoverLabel) {
+          trigger.classList.add('task-running');
+          shortcutEl.textContent = takeoverLabel;
+          pillMetaEl.textContent = getTakeoverMetaText();
+          clearPillNotice();
+          trigger.classList.add('announce');
+        } else {
+          shortcutEl.textContent = '';
+          pillMetaEl.textContent = `${SHORTCUT_TEXT} 打开`;
+          if (!trigger.classList.contains('notice-visible')) {
+            trigger.classList.remove('announce');
+          }
         }
       }
     } else if (state === 'running' && currentTask) {
@@ -4122,22 +4152,31 @@ export const initFloatBall = async () => {
 
   /** 提交录制给 background AI 处理 */
   const submitRecording = (resultSelector: string | null) => {
-    // 更新 footer 提示
+    // 进入审计状态
+    isRecorderAuditing = true;
     footerTextEl.textContent = 'AI 正在审计录制...';
     trigger.classList.remove('recording');
+    trigger.classList.add('auditing', 'announce');
     recorderBarEl.classList.remove('visible');
-    recorderBtnEl.style.display = '';
+    recorderBtnEl.style.display = 'none';
+    updatePillState();
 
     Channel.send('__recorder_submit', {
       resultSelector,
       resultMode: resultSelector ? 'element' : 'skip',
     }, (resp: any) => {
+      // 回调仅作为 __recorder_result 的兜底（导航丢失监听时）
+      if (!isRecorderAuditing) return; // 已被 __recorder_result 处理
+      isRecorderAuditing = false;
+      trigger.classList.remove('auditing');
+      recorderBtnEl.style.display = '';
       if (resp?.success) {
         showPillNotice('工作流已保存', 'success');
       } else {
         showPillNotice(resp?.error || '生成失败', 'error');
       }
       footerTextEl.textContent = 'Mole \u00B7 AI 助手';
+      updatePillState();
     });
   };
 
@@ -4152,7 +4191,7 @@ export const initFloatBall = async () => {
     // 注册一次性点击捕获（在 document 上）
     const markClickHandler = (e: MouseEvent) => {
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       const target = e.target as Element;
       if (!target) return;
       // 忽略 mole 自身的点击
@@ -4223,15 +4262,18 @@ export const initFloatBall = async () => {
     stopRecording();
   });
 
-  // AI 处理结果监听
+  // AI 处理结果监听（可靠路径：background 主动推送）
   Channel.on('__recorder_result', (data: any) => {
-    trigger.classList.remove('recording');
-    if (data?.success) {
+    isRecorderAuditing = false;
+    trigger.classList.remove('recording', 'auditing');
+    recorderBtnEl.style.display = '';
+    if (data?.success || data?.workflow) {
       showPillNotice('工作流已保存', 'success');
     } else {
       showPillNotice(data?.error || '生成失败', 'error');
     }
     footerTextEl.textContent = 'Mole \u00B7 AI 助手';
+    updatePillState();
   });
 
   const updateFooterTime = () => {
@@ -4318,6 +4360,14 @@ export const initFloatBall = async () => {
       hintEl.style.display = '';
     }
     updateFooterTime();
+    // 录制/审计状态保护：防止被常规状态刷新覆盖
+    if (isRecording) {
+      recorderBtnEl.style.display = 'none';
+    }
+    if (isRecorderAuditing) {
+      footerTextEl.textContent = 'AI 正在审计录制...';
+      recorderBtnEl.style.display = 'none';
+    }
     updatePillState();
   };
 

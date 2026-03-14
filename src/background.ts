@@ -4358,7 +4358,7 @@ Channel.on('__recorder_submit', (data, _sender, sendResponse) => {
             void saveRecorderState();
 
             // 广播结果给发起 tab
-            Channel.sendToTab(tabId, '__recorder_result', { workflow: workflowSpec });
+            Channel.sendToTab(tabId, '__recorder_result', { success: true, workflow: workflowSpec });
 
             sendResponse?.({ success: true, workflow: workflowSpec });
         } catch (err: any) {
