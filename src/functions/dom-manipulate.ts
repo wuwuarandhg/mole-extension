@@ -6,6 +6,15 @@
 
 import type { FunctionDefinition, ToolExecutionContext } from './types';
 
+/** 获取当前活动标签页 ID 作为 fallback */
+const getActiveTabId = (): Promise<number | null> => {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      resolve(tabs?.[0]?.id ?? null);
+    });
+  });
+};
+
 /** 注入到页面中执行的 DOM 操作调度器 */
 const injectedDomDispatcher = (
   action: string,
@@ -290,6 +299,10 @@ export const domManipulateFunction: FunctionDefinition = {
         type: 'string',
         description: 'cloneElement 时为克隆体指定新 ID（避免重复）',
       },
+      tab_id: {
+        type: 'number',
+        description: '目标标签页 ID。不传则操作当前活动标签页。',
+      },
     },
     required: ['action', 'selector'],
   },
@@ -307,20 +320,25 @@ export const domManipulateFunction: FunctionDefinition = {
       limit?: number;
       timeout?: number;
       new_id?: string;
+      tab_id?: number;
     },
     context?: ToolExecutionContext,
   ) => {
-    const { action, selector, timeout = 5000, ...rest } = params;
+    const { action, selector, timeout = 5000, tab_id, ...rest } = params;
     const signal = context?.signal;
 
-    // 确定目标标签页
-    let tabId = context?.tabId;
-    if (!tabId) {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      tabId = activeTab?.id;
-    }
-    if (!tabId) {
-      return { success: false, error: '无法获取当前标签页' };
+    // 确定目标 tabId（优先级：params.tab_id > context.tabId > 当前活动标签页）
+    let tabId: number;
+    if (typeof tab_id === 'number' && Number.isFinite(tab_id)) {
+      tabId = tab_id;
+    } else if (typeof context?.tabId === 'number') {
+      tabId = context.tabId;
+    } else {
+      const activeTabId = await getActiveTabId();
+      if (!activeTabId) {
+        return { success: false, error: '无法获取当前标签页' };
+      }
+      tabId = activeTabId;
     }
 
     // waitFor 需要轮询

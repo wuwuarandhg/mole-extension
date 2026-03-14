@@ -65,6 +65,30 @@ Goals requiring 2+ steps. Each step decides the next based on the actual result 
 
 Contains multiple relatively independent sub-goals. Uses `spawn_subtask` to split each independent sub-goal into an isolated task with its own context, preventing information cross-contamination.
 
+## Multi-Tab Orchestration
+
+Mole can operate across multiple browser tabs within a single task — for example, searching on one page, extracting data, and filling a form on another.
+
+### How It Works
+
+All page-operating tools support an optional `tab_id` parameter. The AI follows this flow:
+
+1. **Open a new tab** — `tab_navigate(action='open', url='...')` returns the new tab's `tab_id`
+2. **Operate on the target tab** — Pass `tab_id` to any tool: `page_snapshot(tab_id=123)`, `page_action(tab_id=123, ...)`, `extract_data(tab_id=123, ...)`
+3. **Clean up** — `tab_navigate(action='close', tab_id=123)` when done
+
+### Key Rules
+
+- **element_id is tab-private** — An element ID obtained from Tab A cannot be used on Tab B. Always call `page_snapshot` on the target tab first.
+- **Default behavior unchanged** — When `tab_id` is omitted, tools operate on the tab where the user started the conversation, exactly as before.
+- **List open tabs** — `tab_navigate(action='list')` shows all tabs with their IDs.
+
+### Example Scenarios
+
+- "Open Hacker News, extract the top 5 headlines, and summarize them here"
+- "Search for product X on site A, then fill in the price on site B's form"
+- "Compare the pricing tables on these two URLs"
+
 ## Deep CDP Control
 
 Mole connects to 10 Chrome DevTools Protocol (CDP) domains, providing browser-process-level deep control that overcomes Content Script limitations:

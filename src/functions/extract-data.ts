@@ -7,6 +7,15 @@
 import type { FunctionDefinition, FunctionResult, ToolExecutionContext } from './types';
 import { appendToBuffer, getOrCreateBuffer } from './data-pipeline';
 
+/** 获取当前活动标签页 ID 作为 fallback */
+const getActiveTabId = (): Promise<number | null> => {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      resolve(tabs?.[0]?.id ?? null);
+    });
+  });
+};
+
 /** 注入到页面中执行的数据提取调度器 */
 const injectedExtractDispatcher = (
   mode: string,
@@ -476,6 +485,10 @@ export const extractDataFunction: FunctionDefinition = {
         type: 'string',
         description: '提取后直接写入缓冲区（旁路 LLM），仅返回统计摘要。传入已有缓冲区 ID 则追加，传入新 ID 则自动创建',
       },
+      tab_id: {
+        type: 'number',
+        description: '目标标签页 ID。不传则操作当前活动标签页。',
+      },
     },
     required: ['mode'],
   },
@@ -487,20 +500,25 @@ export const extractDataFunction: FunctionDefinition = {
       schema?: any;
       max_items?: number;
       buffer_id?: string;
+      tab_id?: number;
     },
     context?: ToolExecutionContext,
   ): Promise<FunctionResult> => {
-    const { mode, scope, schema, buffer_id } = params;
+    const { mode, scope, schema, buffer_id, tab_id } = params;
     const maxItems = Math.min(Math.max(params.max_items || 100, 1), 500);
 
-    // 确定目标标签页
-    let tabId = context?.tabId;
-    if (!tabId) {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      tabId = activeTab?.id;
-    }
-    if (!tabId) {
-      return { success: false, error: '无法获取当前标签页' };
+    // 确定目标 tabId（优先级：params.tab_id > context.tabId > 当前活动标签页）
+    let tabId: number;
+    if (typeof tab_id === 'number' && Number.isFinite(tab_id)) {
+      tabId = tab_id;
+    } else if (typeof context?.tabId === 'number') {
+      tabId = context.tabId;
+    } else {
+      const activeTabId = await getActiveTabId();
+      if (!activeTabId) {
+        return { success: false, error: '无法获取当前标签页' };
+      }
+      tabId = activeTabId;
     }
 
     try {

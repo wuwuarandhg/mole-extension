@@ -9,6 +9,15 @@
 import type { FunctionDefinition, ToolExecutionContext } from './types';
 import { sendToTabWithRetry } from './tab-message';
 
+/** 获取当前活动标签页 ID 作为 fallback */
+const getActiveTabId = (): Promise<number | null> => {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      resolve(tabs?.[0]?.id ?? null);
+    });
+  });
+};
+
 interface WaitNavigationOptions {
   timeoutMs: number;
   stableMs: number;
@@ -247,6 +256,10 @@ export const pageActionFunction: FunctionDefinition = {
         type: 'string',
         description: 'wait_navigation 可选：URL 正则匹配（字符串形式）',
       },
+      tab_id: {
+        type: 'number',
+        description: '目标标签页 ID。不传则操作当前活动标签页。',
+      },
     },
     required: ['action'],
   },
@@ -298,17 +311,23 @@ export const pageActionFunction: FunctionDefinition = {
       require_url_change?: boolean;
       url_contains?: string;
       url_regex?: string;
+      tab_id?: number;
     },
     context?: ToolExecutionContext,
   ) => {
-    // 获取目标 tabId
-    let tabId = context?.tabId;
-    if (!tabId) {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      tabId = activeTab?.id;
-    }
-    if (!tabId) {
-      return { success: false, error: '无法获取当前标签页' };
+    // 确定目标 tabId（优先级：params.tab_id > context.tabId > 当前活动标签页）
+    const { tab_id } = params;
+    let tabId: number;
+    if (typeof tab_id === 'number' && Number.isFinite(tab_id)) {
+      tabId = tab_id;
+    } else if (typeof context?.tabId === 'number') {
+      tabId = context.tabId;
+    } else {
+      const activeTabId = await getActiveTabId();
+      if (!activeTabId) {
+        return { success: false, error: '无法获取当前标签页' };
+      }
+      tabId = activeTabId;
     }
 
     if (params.action === 'wait_navigation') {

@@ -93,6 +93,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - 支持多轮 function calling（最多 5 轮，防止无限循环）
 - 系统提示词定义了 AI 角色和可用工具
 - 通过回调函数推送流式事件（thinking/function_call/function_result/text/done/error）
+- **跨标签页操作**：所有页面操作工具均支持 `tab_id` 参数，AI 可在单次任务中操作多个标签页（如在 A 页面查信息，在 B 页面填表）
 
 #### LLM 客户端 (`src/ai/llm-client.ts`)
 
@@ -119,6 +120,11 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `cdp-overlay.ts` - CDP 视觉高亮标注（Overlay 域）
 - `extract-data.ts` - 结构化数据提取（auto/table/list/repeat/schema 五种模式）
 - `data-pipeline.ts` - 数据管道（缓冲区管理 + 转换 + JSON/CSV/Markdown/TSV 导出）
+- `tab-navigate.ts` - 标签页导航控制（open/close/switch/list/navigate 等 13 种操作）
+- `tab-utils.ts` - Tab 工具函数（等待加载、隐藏 tab 操作等）
+
+**跨标签页操作说明：**
+所有需要操作页面的工具（page_viewer、page_snapshot、page_skeleton、page_action、dom_manipulate、cdp_input、extract_data、site_workflow 以及 13 个 CDP 工具）均支持可选的 `tab_id` 参数。tabId 解析优先级：`params.tab_id` > `context.tabId`（编排器注入） > 当前活动标签页。AI 通过 `tab_navigate(action='open')` 获取新 tab 的 `tab_id`，然后在后续工具调用中传入该 id 即可操作目标标签页。
 
 #### CDP 会话管理器 (`src/lib/cdp-session.ts`)
 

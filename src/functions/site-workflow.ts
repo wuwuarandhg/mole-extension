@@ -129,12 +129,16 @@ export const siteWorkflowFunction: FunctionDefinition = {
         type: 'object',
         description: '传给工作流的参数',
       },
+      tab_id: {
+        type: 'number',
+        description: '目标标签页 ID。不传则使用当前活动标签页。',
+      },
     },
     required: ['name'],
   },
 
   execute: async (
-    rawParams: { name?: string; params?: Record<string, unknown> },
+    rawParams: { name?: string; params?: Record<string, unknown>; tab_id?: number },
     context?: ToolExecutionContext,
   ): Promise<FunctionResult> => {
     const workflowName = String(rawParams?.name || '').trim();
@@ -159,12 +163,21 @@ export const siteWorkflowFunction: FunctionDefinition = {
       : {};
     const mergedParams = { ...defaults, ...topLevel, ...nestedParams };
 
+    // 构建最终 context：tab_id 参数优先于 context.tabId
+    const effectiveContext: ToolExecutionContext = {
+      ...context,
+      tabId: (typeof rawParams.tab_id === 'number' && Number.isFinite(rawParams.tab_id))
+        ? rawParams.tab_id
+        : context?.tabId,
+      signal: context?.signal,
+    };
+
     // 调用执行引擎
     return executeDebugRemotePlan(
       workflowName,
       spec.plan,
       mergedParams,
-      context,
+      effectiveContext,
     );
   },
 };

@@ -53,6 +53,10 @@ export const pageSnapshotFunction: FunctionDefinition = {
         type: 'number',
         description: '最多返回多少个候选元素，范围 1-60，默认 20。',
       },
+      tab_id: {
+        type: 'number',
+        description: '目标标签页 ID。不传则操作当前活动标签页。',
+      },
     },
     required: [],
   },
@@ -64,16 +68,23 @@ export const pageSnapshotFunction: FunctionDefinition = {
       include_hidden?: boolean;
       only_viewport?: boolean;
       limit?: number;
+      tab_id?: number;
     },
     context?: ToolExecutionContext,
   ) => {
-    let tabId = context?.tabId;
-    if (!tabId) {
-      tabId = (await getActiveTabId()) ?? undefined;
-    }
-
-    if (!tabId) {
-      return { success: false, error: '无法获取当前标签页' };
+    // 确定目标 tabId（优先级：params.tab_id > context.tabId > 当前活动标签页）
+    const { tab_id } = params;
+    let tabId: number;
+    if (typeof tab_id === 'number' && Number.isFinite(tab_id)) {
+      tabId = tab_id;
+    } else if (typeof context?.tabId === 'number') {
+      tabId = context.tabId;
+    } else {
+      const activeTabId = await getActiveTabId();
+      if (!activeTabId) {
+        return { success: false, error: '无法获取当前标签页' };
+      }
+      tabId = activeTabId;
     }
 
     try {

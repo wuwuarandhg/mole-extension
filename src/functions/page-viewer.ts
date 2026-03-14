@@ -38,21 +38,30 @@ export const pageViewerFunction: FunctionDefinition = {
         type: 'number',
         description: '正文内容的最大字符数，默认3000，范围500-10000',
       },
+      tab_id: {
+        type: 'number',
+        description: '目标标签页 ID。不传则操作当前活动标签页。',
+      },
     },
     required: [],
   },
   execute: async (
-    params: { sections?: string[]; max_content_length?: number },
+    params: { sections?: string[]; max_content_length?: number; tab_id?: number },
     context?: ToolExecutionContext,
   ) => {
-    // 优先使用 context 中的 tabId，fallback 到当前活动标签页
-    let tabId = context?.tabId;
-    if (!tabId) {
-      tabId = (await getActiveTabId()) ?? undefined;
-    }
-
-    if (!tabId) {
-      return { success: false, error: '无法获取当前标签页' };
+    // 确定目标 tabId（优先级：params.tab_id > context.tabId > 当前活动标签页）
+    const { tab_id } = params;
+    let tabId: number;
+    if (typeof tab_id === 'number' && Number.isFinite(tab_id)) {
+      tabId = tab_id;
+    } else if (typeof context?.tabId === 'number') {
+      tabId = context.tabId;
+    } else {
+      const activeTabId = await getActiveTabId();
+      if (!activeTabId) {
+        return { success: false, error: '无法获取当前标签页' };
+      }
+      tabId = activeTabId;
     }
 
     try {
