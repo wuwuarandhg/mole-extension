@@ -117,6 +117,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `cdp-storage.ts` - CDP 页面存储操作（DOMStorage 域）
 - `cdp-css.ts` - CDP CSS 样式操作（CSS 域）
 - `cdp-overlay.ts` - CDP 视觉高亮标注（Overlay 域）
+- `extract-data.ts` - 结构化数据提取（auto/table/list/repeat/schema 五种模式）
+- `data-pipeline.ts` - 数据管道（缓冲区管理 + 转换 + JSON/CSV/Markdown/TSV 导出）
 
 #### CDP 会话管理器 (`src/lib/cdp-session.ts`)
 
