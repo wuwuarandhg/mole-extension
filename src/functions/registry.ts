@@ -41,6 +41,8 @@ import { cdpDomFunction } from './cdp-dom';
 import { cdpStorageFunction } from './cdp-storage';
 import { cdpCssFunction } from './cdp-css';
 import { cdpOverlayFunction } from './cdp-overlay';
+import { extractDataFunction } from './extract-data';
+import { dataPipelineFunction } from './data-pipeline';
 
 const DYNAMIC_TOOL_STORAGE_KEY = 'mole_dynamic_tools_v1';
 const DYNAMIC_TOOL_MAX_TIMEOUT_MS = 60_000;
@@ -113,6 +115,8 @@ const BUILTIN_FUNCTIONS: FunctionDefinition[] = [
   cdpStorageFunction,
   cdpCssFunction,
   cdpOverlayFunction,
+  extractDataFunction,
+  dataPipelineFunction,
 ];
 
 const builtinToolNames = new Set(BUILTIN_FUNCTIONS.map((tool) => tool.name));

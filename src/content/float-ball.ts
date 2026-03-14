@@ -131,6 +131,12 @@ const LOGO_CDP_CSS = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<sv
 // CDP 高亮标注（靶心图标，石板蓝色）
 const LOGO_CDP_OVERLAY = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>')}`;
 
+// 数据提取（表格+放大镜，翠绿色）
+const LOGO_EXTRACT_DATA = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><circle cx="18" cy="18" r="3" fill="white" stroke="#059669" stroke-width="1.5"/><line x1="20" y1="20" x2="22" y2="22" stroke="#059669" stroke-width="1.5"/></svg>')}`;
+
+// 数据管道（漏斗+箭头，靛蓝色）
+const LOGO_DATA_PIPELINE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>')}`;
+
 // 函数图标映射（函数名 → logo）
 const FUNCTION_ICONS: Record<string, string> = {
   page_viewer: LOGO_PAGE_VIEWER,
@@ -162,6 +168,8 @@ const FUNCTION_ICONS: Record<string, string> = {
   cdp_storage: LOGO_CDP_STORAGE,
   cdp_css: LOGO_CDP_CSS,
   cdp_overlay: LOGO_CDP_OVERLAY,
+  extract_data: LOGO_EXTRACT_DATA,
+  data_pipeline: LOGO_DATA_PIPELINE,
 };
 
 // 函数中文名映射（用户可见，不暴露英文标识）
@@ -195,6 +203,8 @@ const FUNCTION_LABELS: Record<string, string> = {
   cdp_storage: '页面存储',
   cdp_css: 'CSS 样式',
   cdp_overlay: '元素高亮',
+  extract_data: '数据提取',
+  data_pipeline: '数据管道',
 };
 type Side = 'left' | 'right';
 

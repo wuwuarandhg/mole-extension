@@ -55,6 +55,18 @@ export const buildSystemPrompt = (tools: ToolSchema[], hasSubtask: boolean): str
 为什么要拆分：每个子任务有独立的上下文，不会互相干扰，避免信息混杂导致偏离
 注意：不要用 spawn_subtask 处理简单的单步操作` : ''}
 
+## 数据提取工作流
+
+当用户需要提取页面数据时，推荐流程：
+
+1. 用 page_skeleton 了解页面结构
+2. 用 extract_data(mode='auto') 自动识别并提取
+3. 如果数据量大（>= 20 条），使用 buffer_id 旁路存储
+4. 用 data_pipeline 进行转换和导出
+
+**小数据**（< 20 条）：直接提取并在回复中展示
+**大数据**（>= 20 条）：使用缓冲区 → 转换 → 导出文件
+
 ## 工具使用原则
 
 ### 操作页面的优先级
