@@ -72,7 +72,18 @@
       "Bash(grep -c 'debug-shell\\\\|mode-switch\\\\|mode-btn\\\\|workspace-grid\\\\|card-list\\\\|history-timeline' /Users/clark/MySpace/mole-extension/build_version/mole-extension_1.0.0/assets/options-*.js)",
       "Bash(npm view antd versions --json 2>&1 | python3 -c \"import sys,json; versions=[v for v in json.load\\(sys.stdin\\) if v.startswith\\('5.'\\)]; print\\(versions[-1] if versions else 'none'\\)\")",
       "Bash(npm view antd versions --json 2>&1 | python3 -c \"import sys,json; versions=[v for v in json.load\\(sys.stdin\\) if v.startswith\\('5.'\\) and '-' not in v]; print\\(versions[-1] if versions else 'none'\\)\")",
-      "Bash(npm view @ant-design/icons versions --json 2>&1 | python3 -c \"import sys,json; versions=[v for v in json.load\\(sys.stdin\\) if v.startswith\\('5.'\\) and '-' not in v]; print\\(versions[-1] if versions else 'none'\\)\")"
+      "Bash(npm view @ant-design/icons versions --json 2>&1 | python3 -c \"import sys,json; versions=[v for v in json.load\\(sys.stdin\\) if v.startswith\\('5.'\\) and '-' not in v]; print\\(versions[-1] if versions else 'none'\\)\")",
+      "Bash(for dir in .trellis/tasks/03-*/; do echo \"=== $\\(basename $dir\\) ===\"; cat \"$dir/task.json\" 2>/dev/null | python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\\\\\"标题: {d.get\\('title','?'\\)}\\\\\"\\); print\\(f\\\\\"优先级: {d.get\\('priority','?'\\)}\\\\\"\\); print\\(f\\\\\"状态: {d.get\\('status','?'\\)}\\\\\"\\); print\\(f\\\\\"负责人: {d.get\\('assignee','?'\\)}\\\\\"\\); print\\(f\\\\\"描述: {d.get\\('description','?'\\)}\\\\\"\\)\"; echo; done)",
+      "Bash(git -C /Users/clark/MySpace/mole-extension status -u)",
+      "Bash(git -C /Users/clark/MySpace/mole-extension diff --stat)",
+      "Bash(git -C /Users/clark/MySpace/mole-extension log --oneline -5)",
+      "Bash(git -C /Users/clark/MySpace/mole-extension add \\\\\n  CLAUDE.md \\\\\n  docs/guide/features.md \\\\\n  src/ai/system-prompt.ts \\\\\n  src/functions/cdp-input.ts \\\\\n  src/functions/dom-manipulate.ts \\\\\n  src/functions/extract-data.ts \\\\\n  src/functions/page-action.ts \\\\\n  src/functions/page-skeleton.ts \\\\\n  src/functions/page-snapshot.ts \\\\\n  src/functions/page-viewer.ts \\\\\n  src/functions/site-workflow.ts \\\\\n  .trellis/spec/frontend/index.md)",
+      "Bash(git -C /Users/clark/MySpace/mole-extension add \\\\\n  CLAUDE.md \\\\\n  docs/guide/features.md \\\\\n  src/ai/system-prompt.ts \\\\\n  src/functions/cdp-input.ts \\\\\n  src/functions/dom-manipulate.ts \\\\\n  src/functions/extract-data.ts \\\\\n  src/functions/page-action.ts \\\\\n  src/functions/page-skeleton.ts \\\\\n  src/functions/page-snapshot.ts \\\\\n  src/functions/page-viewer.ts \\\\\n  src/functions/site-workflow.ts)",
+      "Bash(git -C /Users/clark/MySpace/mole-extension push origin main 2>&1)",
+      "Bash(find /Users/clark/MySpace/mole-extension/openspec -type f -name \"*.md\" 2>/dev/null | head -20)",
+      "Bash(grep -r \"request_confirmation\" /Users/clark/MySpace/mole-extension/src --include=\"*.ts\" -l 2>/dev/null | head -5)",
+      "Bash(done)",
+      "Bash(test -f /Users/clark/MySpace/mole-extension/src/functions/save-workflow.ts && echo \"EXISTS\" || echo \"NOT EXISTS\")"
     ],
     "deny": [],
     "ask": []
