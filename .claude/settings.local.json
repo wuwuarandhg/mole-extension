@@ -83,7 +83,8 @@
       "Bash(find /Users/clark/MySpace/mole-extension/openspec -type f -name \"*.md\" 2>/dev/null | head -20)",
       "Bash(grep -r \"request_confirmation\" /Users/clark/MySpace/mole-extension/src --include=\"*.ts\" -l 2>/dev/null | head -5)",
       "Bash(done)",
-      "Bash(test -f /Users/clark/MySpace/mole-extension/src/functions/save-workflow.ts && echo \"EXISTS\" || echo \"NOT EXISTS\")"
+      "Bash(test -f /Users/clark/MySpace/mole-extension/src/functions/save-workflow.ts && echo \"EXISTS\" || echo \"NOT EXISTS\")",
+      "Bash(wc -l /Users/clark/MySpace/mole-extension/src/content/float-ball.ts /Users/clark/MySpace/mole-extension/src/background.ts /Users/clark/MySpace/mole-extension/src/content/float-ball/*.ts /Users/clark/MySpace/mole-extension/src/background/*.ts)"
     ],
     "deny": [],
     "ask": []
