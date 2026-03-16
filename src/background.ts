@@ -328,6 +328,14 @@ interface SessionReplayRequestOp {
     sendResponse: SessionChannelResponder;
 }
 
+interface SessionResumeOp {
+    type: 'resume';
+    label: string;
+    sessionId: string;
+    tabId: number | undefined;
+    sendResponse: SessionChannelResponder;
+}
+
 type SessionOp =
     | SessionCreateOp
     | SessionContinueOp
@@ -335,7 +343,8 @@ type SessionOp =
     | SessionClearOp
     | SessionCancelOp
     | SessionGetActiveOp
-    | SessionReplayRequestOp;
+    | SessionReplayRequestOp
+    | SessionResumeOp;
 
 function buildSessionOpQueueSnapshot(now: number = Date.now()): SessionOpQueueSnapshot {
     return {
@@ -2126,6 +2135,7 @@ function buildSessionSyncPayload(session: Session) {
         replayEventCount: replayMeta.eventCount,
         replayLastTimestamp: replayMeta.lastTimestamp,
         originTabId: session.originTabId,
+        hasContext: Array.isArray(session.context) && session.context.length > 0,
     };
 }
 
@@ -3288,6 +3298,106 @@ async function handleSessionContinueOp(op: SessionContinueOp) {
     });
 }
 
+/** 可恢复的失败码集合 */
+const RESUMABLE_FAILURE_CODES = new Set([
+    'E_SESSION_RUNTIME',  // SW 重启
+    'E_LLM_API',          // API 错误
+    'E_CANCELLED',        // 用户取消（可能想重试）
+    'E_TOOL_EXEC',        // 工具执行失败
+    'E_UNKNOWN',          // 未知错误
+]);
+
+async function handleSessionResumeOp(op: SessionResumeOp) {
+    const respond = (payload: Record<string, unknown>) => {
+        respondSessionOp(op.sendResponse, payload, op.label);
+    };
+
+    const session = sessions.get(op.sessionId);
+    if (!session) {
+        respond({
+            accepted: false,
+            code: 'E_SESSION_RUNTIME',
+            message: `会话不存在：${op.sessionId}`,
+        });
+        return;
+    }
+
+    // 防重入：正在运行的会话不能恢复
+    if (session.status === 'running' || findRunningTask(op.sessionId)) {
+        respond({
+            accepted: false,
+            code: 'E_TURN_MISMATCH',
+            message: '会话正在运行中，无法重试',
+        });
+        return;
+    }
+
+    // 没有上下文无法恢复
+    if (!Array.isArray(session.context) || session.context.length === 0) {
+        respond({
+            accepted: false,
+            code: 'E_SESSION_RUNTIME',
+            message: '会话没有可恢复的上下文',
+        });
+        return;
+    }
+
+    // 检查失败码是否属于可恢复类型
+    if (session.failureCode && !RESUMABLE_FAILURE_CODES.has(session.failureCode)) {
+        respond({
+            accepted: false,
+            code: 'E_PARAM_RESOLVE',
+            message: `当前错误类型 ${session.failureCode} 不支持断点恢复`,
+        });
+        return;
+    }
+
+    // 构建恢复提示
+    const failureDesc = session.failureCode || '异常';
+    const resumeHint = `上一轮任务因 ${failureDesc} 中断，请基于已有的工具调用结果继续完成任务。不要重复已经完成的步骤。`;
+
+    // 重置 session 状态
+    session.status = 'running';
+    session.startedAt = Date.now();
+    session.endedAt = undefined;
+    session.durationMs = undefined;
+    session.failureCode = undefined;
+    session.lastError = undefined;
+    session.agentState = {
+        phase: 'plan',
+        round: 0,
+        reason: `断点恢复：${resumeHint.slice(0, 30)}`,
+        updatedAt: Date.now(),
+    };
+
+    // 如果 originTabId 对应的标签页已关闭，更新为当前 tabId
+    if (session.originTabId && op.tabId) {
+        try {
+            await chrome.tabs.get(session.originTabId);
+        } catch {
+            session.originTabId = op.tabId;
+        }
+    }
+
+    Channel.broadcast('__session_sync', buildSessionSyncPayload(session));
+    persistRuntimeSessions();
+
+    console.log(`[Mole] 断点恢复会话: ${session.id}, failureCode: ${failureDesc}`);
+
+    // 通过 runSessionNow 重新执行，传入 resumeHint 作为 query
+    // session.context 已保存了之前的上下文，runSessionTaskChat 会自动用它作为 previousContext
+    await runSessionNow(session, resumeHint, op.tabId, {
+        appendUserQuery: true,
+        taskKind: getSessionTaskKind(session.id),
+    });
+
+    respond({
+        accepted: true,
+        mode: 'resume',
+        sessionId: op.sessionId,
+    });
+}
+
 async function handleSessionRollbackOp(op: SessionRollbackOp) {
     if (hasRunningTasks()) {
         respondSessionOp(op.sendResponse, {
@@ -3470,6 +3580,10 @@ async function handleSessionOp(op: SessionOp) {
         await handleSessionReplayRequestOp(op);
         return;
     }
+    if (op.type === 'resume') {
+        await handleSessionResumeOp(op);
+        return;
+    }
 }
 
 function submitSessionOp(op: SessionOp): Promise<void> {
@@ -3551,6 +3665,32 @@ Channel.on('__session_rollback', (data, _sender, sendResponse) => {
         sessionId,
         turns,
         source,
+        sendResponse,
+    };
+    void submitSessionOp(op);
+    return true;
+});
+
+/**
+ * 断点恢复
+ * 任务失败后，用户点击"重试"按钮，从保存的 context 断点恢复执行
+ */
+Channel.on('__session_resume', (data, sender, sendResponse) => {
+    const sessionId = typeof data?.sessionId === 'string' ? data.sessionId : '';
+    if (!sessionId) {
+        sendResponse?.({
+            accepted: false,
+            code: 'E_PARAM_RESOLVE',
+            message: '缺少 sessionId',
+        });
+        return true;
+    }
+
+    const op: SessionResumeOp = {
+        type: 'resume',
+        label: '__session_resume',
+        sessionId,
+        tabId: sender?.tab?.id,
         sendResponse,
     };
     void submitSessionOp(op);

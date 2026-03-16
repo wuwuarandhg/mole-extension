@@ -95,6 +95,8 @@ export interface SessionSyncPayload {
   replayLastTimestamp?: number;
   /** 发起任务的标签页 ID（用于页签感知） */
   originTabId?: number;
+  /** 会话是否有可恢复的上下文（用于重试按钮判断） */
+  hasContext?: boolean;
 }
 
 /** 会话回放负载 */

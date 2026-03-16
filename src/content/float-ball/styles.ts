@@ -1280,6 +1280,47 @@ export const getStyles = () => `
     display: flex;
   }
 
+  /* ---- 重试按钮（断点恢复） ---- */
+  .mole-retry-btn {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    outline: none;
+    background: rgba(245, 158, 11, 0.06);
+    color: #d97706;
+    border-radius: 9px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    line-height: 1;
+    transition: all 0.15s ease;
+    padding: 0;
+  }
+
+  .mole-retry-btn:hover {
+    background: rgba(245, 158, 11, 0.12);
+    color: #b45309;
+    border-color: rgba(245, 158, 11, 0.3);
+    transform: translateY(-1px);
+  }
+
+  .mole-retry-btn.visible {
+    display: flex;
+  }
+
+  .mole-retry-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .mole-retry-btn:focus-visible {
+    box-shadow: var(--ec-focus-ring);
+  }
+
   /* ---- 定位到任务页签按钮 ---- */
   .mole-focus-tab-btn {
     flex-shrink: 0;

@@ -220,6 +220,7 @@ export const initFloatBall = async () => {
       <input class="mole-input" type="text" placeholder="有什么想让我做的？" autocomplete="off" />
       <span class="mole-input-hint">ESC</span>
       <button class="mole-new-btn" title="新对话">+</button>
+      <button class="mole-retry-btn" title="重试">↻</button>
       <button class="mole-stop-btn" title="终止任务">■</button>
     </div>
     <div class="mole-divider"></div>
@@ -282,6 +283,7 @@ export const initFloatBall = async () => {
   const imageViewerPrevEl = imageViewerEl.querySelector('.mole-image-viewer-nav.prev') as HTMLButtonElement;
   const imageViewerNextEl = imageViewerEl.querySelector('.mole-image-viewer-nav.next') as HTMLButtonElement;
   const newBtn = searchbox.querySelector('.mole-new-btn') as HTMLButtonElement;
+  const retryBtn = searchbox.querySelector('.mole-retry-btn') as HTMLButtonElement;
   const stopBtn = searchbox.querySelector('.mole-stop-btn') as HTMLButtonElement;
 
   // ---- "定位到任务页签" 按钮（非发起页签时显示） ----
@@ -358,6 +360,8 @@ export const initFloatBall = async () => {
     durationMs: number | null;
     taskKind?: string;
     opQueue?: SessionOpQueueSnapshot;
+    /** 会话是否有可恢复的上下文 */
+    hasContext?: boolean;
   }
 
   interface TabTakeoverState {
@@ -1524,6 +1528,7 @@ export const initFloatBall = async () => {
       footerTimeEl.textContent = '';
       stopBtn.classList.remove('visible');
       newBtn.classList.remove('visible');
+      retryBtn.classList.remove('visible');
       focusTabBtn.style.display = 'none';
       hintEl.style.display = '';
     } else if (currentTask.status === 'running') {
@@ -1550,21 +1555,35 @@ export const initFloatBall = async () => {
       }
       footerTextEl.textContent = footerParts.join(' · ');
       newBtn.classList.remove('visible');
+      retryBtn.classList.remove('visible');
+      retryBtn.disabled = false;
       hintEl.style.display = 'none';
     } else {
       // done / error
       searchbox.classList.add(currentTask.status === 'error' ? 'state-error' : 'state-done');
+      // 判断是否可恢复：error 状态 + 有上下文
+      const canResume = currentTask.status === 'error'
+        && currentTask.hasContext === true
+        && !!currentTask.failureCode;
       if (nonOrigin) {
         // 非发起页签：禁止继续对话
         inputEl.disabled = true;
         inputEl.placeholder = '任务运行在其他标签页';
         focusTabBtn.style.display = '';
         newBtn.classList.remove('visible');
+        retryBtn.classList.remove('visible');
       } else {
         inputEl.disabled = false;
         inputEl.placeholder = '继续对话...';
         focusTabBtn.style.display = 'none';
         newBtn.classList.add('visible');
+        // 仅在可恢复时显示重试按钮
+        if (canResume) {
+          retryBtn.classList.add('visible');
+          retryBtn.disabled = false;
+        } else {
+          retryBtn.classList.remove('visible');
+        }
       }
       footerTextEl.textContent = currentTask.status === 'error'
         ? `处理失败 · ${getTaskTitle(currentTask)}${currentTask.failureCode ? ` (${currentTask.failureCode})` : ''}`
@@ -1732,6 +1751,30 @@ export const initFloatBall = async () => {
   newBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     startNewSession();
+  });
+
+  // ---- 重试按钮：断点恢复 ----
+  retryBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!currentTask || currentTask.status !== 'error') return;
+    if (retryBtn.disabled) return;
+
+    // 置灰禁用，防止重复点击
+    retryBtn.disabled = true;
+
+    const sessionId = currentTask.id;
+    Channel.send('__session_resume', { sessionId }, (response: any) => {
+      if (response?.accepted === false) {
+        // 恢复失败，重新启用按钮
+        retryBtn.disabled = false;
+        const message = typeof response?.message === 'string' && response.message.trim()
+          ? response.message.trim()
+          : '恢复失败';
+        appendToResult(`<div class="mole-error">\u26A0 ${escapeHtml(message)}</div>`);
+        updateInputUI();
+      }
+      // 恢复成功后，__session_sync 会自动更新 UI 为 running 状态
+    });
   });
 
   // ---- 结果渲染 ----
@@ -3123,6 +3166,9 @@ export const initFloatBall = async () => {
         currentTask.endedAt = typeof data.endedAt === 'number' ? data.endedAt : null;
         currentTask.durationMs = typeof data.durationMs === 'number' ? data.durationMs : null;
         currentTask.failureCode = data.failureCode || '';
+        if (typeof data.hasContext === 'boolean') {
+          currentTask.hasContext = data.hasContext;
+        }
         currentTask.taskKind = typeof data.taskKind === 'string' ? data.taskKind : currentTask.taskKind;
         if (data.opQueue && typeof data.opQueue === 'object') {
           currentTask.opQueue = data.opQueue;
@@ -3315,6 +3361,7 @@ export const initFloatBall = async () => {
         durationMs: typeof response.durationMs === 'number' ? response.durationMs : null,
         taskKind: typeof response.taskKind === 'string' ? response.taskKind : '',
         opQueue: response.opQueue && typeof response.opQueue === 'object' ? response.opQueue : undefined,
+        hasContext: typeof response.hasContext === 'boolean' ? response.hasContext : undefined,
       };
       replayKnownEventCount = typeof response.replayEventCount === 'number' && response.replayEventCount >= 0
         ? response.replayEventCount
