@@ -162,7 +162,7 @@ import type { FunctionDefinition, FunctionResult } from './types'
 export const myTool: FunctionDefinition = {
   name: 'my_tool',
   description: 'Tool description (AI uses this to decide when to call it)',
-  supportsParallel: true,  // Whether it supports parallel invocation
+  supportsParallel: true,  // Whether it supports parallel execution (true = concurrent via Promise.all)
   parameters: {
     type: 'object',
     properties: {

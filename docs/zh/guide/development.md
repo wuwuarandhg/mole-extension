@@ -162,7 +162,7 @@ import type { FunctionDefinition, FunctionResult } from './types'
 export const myTool: FunctionDefinition = {
   name: 'my_tool',
   description: '工具描述（AI 据此判断何时调用）',
-  supportsParallel: true,  // 是否支持并行调用
+  supportsParallel: true,  // 是否支持并行执行（true = 多工具时 Promise.all 并发）
   parameters: {
     type: 'object',
     properties: {

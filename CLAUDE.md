@@ -93,6 +93,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - 支持多轮 function calling（最多 5 轮，防止无限循环）
 - 系统提示词定义了 AI 角色和可用工具
 - 通过回调函数推送流式事件（thinking/function_call/function_result/text/done/error）
+- **工具并行执行**：LLM 一次返回多个 function_call 时，`supportsParallel: true` 的工具使用 Promise.all 并发执行，serial 工具作为屏障串行执行（`src/ai/tool-executor.ts`）
 - **跨标签页操作**：所有页面操作工具均支持 `tab_id` 参数，AI 可在单次任务中操作多个标签页（如在 A 页面查信息，在 B 页面填表）
 
 #### LLM 客户端 (`src/ai/llm-client.ts`)
