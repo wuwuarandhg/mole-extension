@@ -95,6 +95,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - 通过回调函数推送流式事件（thinking/function_call/function_result/text/done/error）
 - **工具并行执行**：LLM 一次返回多个 function_call 时，`supportsParallel: true` 的工具使用 Promise.all 并发执行，serial 工具作为屏障串行执行（`src/ai/tool-executor.ts`）
 - **断点恢复**：任务执行过程中定期持久化 checkpoint（context 快照），因 SW 重启/API 错误等中断时，用户可一键"重试"从断点恢复执行
+- **Vision 视觉理解**：截图工具执行后，base64 图片自动注入 LLM 多模态上下文，AI 可"看"到页面内容（Canvas/图表/验证码等），每次任务最多 3 张，压缩时自动降级为文字占位
 - **跨标签页操作**：所有页面操作工具均支持 `tab_id` 参数，AI 可在单次任务中操作多个标签页（如在 A 页面查信息，在 B 页面填表）
 
 #### LLM 客户端 (`src/ai/llm-client.ts`)

@@ -133,6 +133,21 @@ Mole supports a **"show once, learn forever"** workflow recording mode. Instead 
 
 Recording persists across page navigations within the same tab. If the page redirects during your demonstration, Mole automatically records the navigation step and continues capturing on the new page.
 
+## Vision (Visual Understanding)
+
+Mole has visual understanding capabilities. When the `screenshot` tool is called, the captured image is automatically injected into the LLM context as a multimodal input. The AI can then "see" the page content and make decisions based on visual information.
+
+**Use cases:**
+- Pages with Canvas, charts, or infographics that DOM parsing cannot capture
+- Understanding overall page layout and visual hierarchy
+- CAPTCHA recognition
+- Verifying visual states (colors, positions, size relationships)
+
+**Limits:**
+- Up to 3 screenshot images per task to control context size
+- Images are automatically stripped during context compression, replaced with text placeholders
+- Prefer `page_snapshot` / `page_skeleton` for structured data; use visual analysis as a supplement
+
 ## Task Recovery
 
 If a task is interrupted due to Service Worker restart, network error, or LLM API timeout, Mole saves the execution context as a checkpoint. When the failure occurs:

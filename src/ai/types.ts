@@ -3,10 +3,25 @@
  * 适配 OpenAI Responses API 格式
  */
 
-/** 用户/助手消息输入项 */
+/** 多模态内容：纯文本 */
+export interface InputTextContent {
+  type: 'input_text';
+  text: string;
+}
+
+/** 多模态内容：图片（base64 data URL） */
+export interface InputImageContent {
+  type: 'input_image';
+  image_url: string;
+}
+
+/** 多模态内容联合类型 */
+export type ContentPart = InputTextContent | InputImageContent;
+
+/** 用户/助手消息输入项（content 支持纯文本或多模态数组） */
 export interface MessageInputItem {
   role: 'user' | 'assistant';
-  content: string;
+  content: string | ContentPart[];
 }
 
 /** 函数调用输入项（来自模型响应，续传时包含） */

@@ -22,10 +22,11 @@
 
 import type {
   InputItem, OutputItem, OutputFunctionCallItem,
-  ToolSchema, AIStreamEvent,
+  ToolSchema, AIStreamEvent, ContentPart,
 } from './types';
+import { ArtifactStore } from '../lib/artifact-store';
 import { chatStream } from './llm-client';
-import { compactContext } from './context-manager';
+import { compactContext, getTextContent } from './context-manager';
 import { executeToolCalls, SPAWN_SUBTASK_SCHEMA } from './tool-executor';
 import { buildSystemPrompt, buildSubtaskPrompt } from './system-prompt';
 import { ensureToolRegistryReady, mcpClient } from '../functions/registry';
@@ -102,6 +103,9 @@ const DEFAULT_BUDGET: LoopBudget = {
 
 const MAX_EMPTY_RETRIES = 2;
 
+/** 每次任务最多注入的截图图片数量（防止上下文膨胀） */
+const MAX_IMAGE_INJECTIONS = 3;
+
 // ============ 辅助函数 ============
 
 /** 稳定序列化用于签名对比 */
@@ -172,6 +176,49 @@ const collectStreamResponse = async (
   return { fullText, functionCalls, outputItems };
 };
 
+/**
+ * 检测工具执行结果中的截图，将图片 base64 注入 LLM 上下文
+ * 让 AI 能"看到"截图内容，用于视觉理解场景
+ */
+const injectScreenshotImages = async (
+  functionCalls: OutputFunctionCallItem[],
+  results: InputItem[],
+  context: InputItem[],
+  imageInjectionCount: number,
+): Promise<number> => {
+  if (imageInjectionCount >= MAX_IMAGE_INJECTIONS) return imageInjectionCount;
+
+  for (const fc of functionCalls) {
+    if (fc.name !== 'screenshot' || imageInjectionCount >= MAX_IMAGE_INJECTIONS) continue;
+
+    // 从结果中找到对应的 function_call_output
+    const resultItem = results.find(
+      r => 'type' in r && r.type === 'function_call_output' && 'call_id' in r && r.call_id === fc.call_id,
+    );
+    if (!resultItem || !('output' in resultItem)) continue;
+
+    try {
+      const parsed = JSON.parse((resultItem as { output: string }).output);
+      if (!parsed?.success || !parsed?.data?.artifact_id) continue;
+
+      const artifact = await ArtifactStore.getScreenshot(parsed.data.artifact_id);
+      if (!artifact?.dataUrl) continue;
+
+      // 构造多模态 user message 追加到 context
+      const content: ContentPart[] = [
+        { type: 'input_text' as const, text: `截图内容（${parsed.data.mode || '可见区域'}）：` },
+        { type: 'input_image' as const, image_url: artifact.dataUrl },
+      ];
+      context.push({ role: 'user' as const, content });
+      imageInjectionCount++;
+    } catch {
+      // 解析失败跳过，不影响主流程
+    }
+  }
+
+  return imageInjectionCount;
+};
+
 /** 注入待处理的用户输入 */
 const injectPendingInputs = async (
   context: InputItem[],
@@ -229,6 +276,7 @@ const agenticLoop = async (
   let round = 0;
   let totalToolCalls = 0;
   let emptyRetries = 0;
+  let imageInjectionCount = 0;
   const signatureCount = new Map<string, number>();
 
   emit({ type: 'thinking', content: 'AI 正在思考...' });
@@ -297,6 +345,9 @@ const agenticLoop = async (
         const results = await executeToolCalls(functionCalls, tabId, signal, emit);
         for (const r of results) context.push(r);
 
+        // 注入截图图片到上下文（视觉理解）
+        imageInjectionCount = await injectScreenshotImages(functionCalls, results, context, imageInjectionCount);
+
         context.push({
           role: 'user' as const,
           content: '已达到工具调用次数上限。请基于当前已有的信息直接给出回答。',
@@ -324,6 +375,9 @@ const agenticLoop = async (
 
       const results = await executeToolCalls(functionCalls, tabId, signal, emit, subtaskRunner);
       for (const r of results) context.push(r);
+
+      // 注入截图图片到上下文（视觉理解）
+      imageInjectionCount = await injectScreenshotImages(functionCalls, results, context, imageInjectionCount);
 
       emitCheckpoint(options, 'act', round, `工具执行完毕（共 ${totalToolCalls} 次调用）`, context);
       continue;
@@ -363,7 +417,7 @@ const agenticLoop = async (
   if (round >= budget.maxRounds) {
     const lastItem = context[context.length - 1];
     const hasReply = 'role' in lastItem && lastItem.role === 'assistant' &&
-                     typeof (lastItem as any).content === 'string' && (lastItem as any).content.trim();
+                     'content' in lastItem && getTextContent(lastItem.content).trim();
     if (!hasReply) {
       context.push({
         role: 'user' as const,

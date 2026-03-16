@@ -25,6 +25,7 @@ import { setupRecorderHandlers } from './background/workflow-recorder';
 import { setupBgTasksHandlers, broadcastBgTasksChanged } from './background/bg-tasks-manager';
 import { handleChat } from './ai/orchestrator';
 import { chatComplete } from './ai/llm-client';
+import { getTextContent } from './ai/context-manager';
 import type { HandleChatOptions } from './ai/orchestrator';
 import { injectAIResponseRunner } from './functions/resident-runtime';
 import type {
@@ -1473,7 +1474,9 @@ function buildReviewTaskQuery(normalizedQuery: string): string {
 }
 
 function isSessionCompressionMessage(item: InputItem): boolean {
-    return 'role' in item && item.role === 'assistant' && item.content.startsWith(SESSION_CONTEXT_COMPRESSION_TAG);
+    if (!('role' in item) || item.role !== 'assistant') return false;
+    const text = getTextContent(item.content);
+    return text.startsWith(SESSION_CONTEXT_COMPRESSION_TAG);
 }
 
 function clipCompactText(raw: unknown, max: number = 48): string {
@@ -1486,7 +1489,7 @@ function pickCompactPrimaryGoal(context: InputItem[]): string {
     for (let index = context.length - 1; index >= 0; index--) {
         const item = context[index];
         if (!('role' in item) || item.role !== 'user') continue;
-        const content = clipCompactText(item.content, 72);
+        const content = clipCompactText(getTextContent(item.content), 72);
         if (content) return content;
     }
     return '延续当前任务';
@@ -1868,7 +1871,7 @@ function compactSessionContext(context: InputItem[]): InputItem[] {
 
 function buildCompactedReplacementContext(context: InputItem[], compactSummary: string): InputItem[] {
     const normalized = compactSessionContext([...(context || [])]).filter((item) => {
-        return !('role' in item && item.role === 'assistant' && item.content.startsWith(SESSION_CONTEXT_COMPRESSION_TAG));
+        return !isSessionCompressionMessage(item);
     });
 
     const selectedUsers: InputItem[] = [];
@@ -1876,7 +1879,7 @@ function buildCompactedReplacementContext(context: InputItem[], compactSummary: 
     for (let index = normalized.length - 1; index >= 0; index--) {
         const item = normalized[index];
         if (!('role' in item) || item.role !== 'user') continue;
-        const content = String(item.content || '').trim();
+        const content = getTextContent(item.content).trim();
         if (!content) continue;
         const effectiveLen = content.length;
         if (effectiveLen > remainingChars && selectedUsers.length > 0) break;
@@ -2198,7 +2201,7 @@ function extractLatestAssistantMessageFromContext(context: InputItem[] | undefin
     for (let index = context.length - 1; index >= 0; index--) {
         const item = context[index];
         if (!('role' in item) || item.role !== 'assistant') continue;
-        const text = String(item.content || '').trim();
+        const text = getTextContent(item.content).trim();
         if (!text || text.startsWith(SESSION_CONTEXT_COMPRESSION_TAG)) continue;
         return text;
     }

@@ -4,10 +4,41 @@
  * 只做事实保留，不做策略注入
  */
 
-import type { InputItem, AIStreamEvent } from './types';
+import type { InputItem, AIStreamEvent, ContentPart, MessageInputItem } from './types';
 
 /** 上下文压缩标记 */
 const CONTEXT_COMPACT_TAG = '[context-compacted]';
+
+/**
+ * 从 content 中提取纯文字内容
+ * 兼容 string 和 ContentPart[] 两种格式
+ */
+export const getTextContent = (content: string | ContentPart[]): string => {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return String(content || '');
+  return content
+    .filter((part): part is { type: 'input_text'; text: string } => part.type === 'input_text')
+    .map(part => part.text)
+    .join('\n');
+};
+
+/**
+ * 将包含图片的多模态 content 降级为纯文字
+ * 保留 input_text 部分，图片替换为 "[图片已省略]"
+ */
+const stripImagesFromContent = (content: string | ContentPart[]): string => {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return String(content || '');
+  const parts: string[] = [];
+  for (const part of content) {
+    if (part.type === 'input_text') {
+      parts.push(part.text);
+    } else if (part.type === 'input_image') {
+      parts.push('[图片已省略]');
+    }
+  }
+  return parts.join('\n');
+};
 
 /**
  * 上下文压缩
@@ -57,7 +88,7 @@ export const compactContext = (
     summaryParts.push(`此前使用过的工具：${toolNames.join('、')}`);
   }
   if (firstUserMessage && 'content' in firstUserMessage) {
-    const goalText = String((firstUserMessage as any).content || '').slice(0, 200);
+    const goalText = getTextContent((firstUserMessage as MessageInputItem).content).slice(0, 200);
     summaryParts.push(`原始目标：${goalText}`);
   }
 
@@ -66,10 +97,26 @@ export const compactContext = (
     content: summaryParts.join('\n'),
   };
 
+  // 压缩时将包含图片的多模态 content 降级为纯文字
+  for (const item of tail) {
+    if ('role' in item && 'content' in item) {
+      const msg = item as MessageInputItem;
+      if (Array.isArray(msg.content)) {
+        msg.content = stripImagesFromContent(msg.content);
+      }
+    }
+  }
+
   // 替换上下文
   const beforeSize = context.length;
   context.splice(0, context.length);
   if (firstUserMessage) {
+    // 首条用户消息也需要降级图片
+    if ('content' in firstUserMessage && Array.isArray((firstUserMessage as MessageInputItem).content)) {
+      (firstUserMessage as MessageInputItem).content = stripImagesFromContent(
+        (firstUserMessage as MessageInputItem).content,
+      );
+    }
     context.push(firstUserMessage);
   }
   context.push(summary, ...tail);

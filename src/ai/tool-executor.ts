@@ -3,9 +3,9 @@
  * 职责：调用 MCP 工具、spawn_subtask 递归、结果截断、事件广播
  */
 
-import type { InputItem, OutputFunctionCallItem, AIStreamEvent, ToolSchema } from './types';
+import type { InputItem, OutputFunctionCallItem, AIStreamEvent, ToolSchema, MessageInputItem } from './types';
 import { mcpClient } from '../functions/registry';
-import { truncateToolResult } from './context-manager';
+import { truncateToolResult, getTextContent } from './context-manager';
 
 /** 子任务执行器类型（由 orchestrator 注入，实现递归） */
 export type SubtaskRunner = (goal: string, signal?: AbortSignal) => Promise<InputItem[]>;
@@ -234,7 +234,7 @@ const extractLastAssistantReply = (context: InputItem[]): string => {
   for (let i = context.length - 1; i >= 0; i--) {
     const item = context[i];
     if ('role' in item && item.role === 'assistant') {
-      return item.content;
+      return getTextContent((item as MessageInputItem).content);
     }
   }
   return '';
