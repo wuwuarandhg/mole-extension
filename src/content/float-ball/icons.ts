@@ -99,6 +99,9 @@ const LOGO_DATA_PIPELINE = `data:image/svg+xml;charset=utf-8,${encodeURIComponen
 const LOGO_REQUEST_CONFIRMATION = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10" stroke="#0d9488" stroke-width="2.5"/></svg>')}`;
 const LOGO_SAVE_WORKFLOW = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>')}`;
 
+// 向用户提问（问号气泡，靛蓝色）
+export const LOGO_ASK_USER = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 8a1.5 1.5 0 0 0-1.5 1.5c0 .5.5 1 1.5 1.5" stroke="#4f46e5" stroke-width="2"/><circle cx="12" cy="14" r="0.5" fill="#4f46e5" stroke="none"/></svg>')}`;
+
 // 函数图标映射（函数名 → logo）
 export const FUNCTION_ICONS: Record<string, string> = {
   page_viewer: LOGO_PAGE_VIEWER,
@@ -133,6 +136,7 @@ export const FUNCTION_ICONS: Record<string, string> = {
   extract_data: LOGO_EXTRACT_DATA,
   data_pipeline: LOGO_DATA_PIPELINE,
   request_confirmation: LOGO_REQUEST_CONFIRMATION,
+  ask_user: LOGO_ASK_USER,
   save_workflow: LOGO_SAVE_WORKFLOW,
 };
 
@@ -170,5 +174,6 @@ export const FUNCTION_LABELS: Record<string, string> = {
   extract_data: '数据提取',
   data_pipeline: '数据管道',
   request_confirmation: '请求确认',
+  ask_user: '向用户提问',
   save_workflow: '保存工作流',
 };

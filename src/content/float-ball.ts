@@ -24,7 +24,7 @@ import {
   INTERNAL_STATUS_HINT, INTERNAL_STATUS_LINE_HINT, INTERNAL_STATUS_SEGMENT_HINT,
 } from './float-ball/constants';
 import type { Side, RuntimeTextMode, RecentCompletedTaskItem, SavedPosition } from './float-ball/constants';
-import { FUNCTION_ICONS, FUNCTION_LABELS } from './float-ball/icons';
+import { FUNCTION_ICONS, FUNCTION_LABELS, LOGO_ASK_USER } from './float-ball/icons';
 import { getStyles } from './float-ball/styles';
 import { escapeHtml, markdownToHtml } from './float-ball/markdown';
 import {
@@ -2491,6 +2491,130 @@ export const initFloatBall = async () => {
     saveSnapshot();
   };
 
+  // ---- 提问卡片处理（ask_user）----
+
+  /** 渲染提问卡片（直接展示在结果区） */
+  const handleAskUserRequest = (
+    requestId: string,
+    question: string,
+    options?: string[],
+    allowFreeText?: boolean,
+  ) => {
+    if (!requestId || !question) return;
+
+    // 如果面板未打开，自动展开（与确认卡片一致）
+    if (!isOpen) {
+      isOpen = true;
+      overlay.classList.add('visible');
+      trigger.classList.add('active');
+    }
+
+    // 构建选项按钮 HTML
+    const optionsHtml = options && options.length > 0
+      ? `<div class="mole-ask-user-options">
+          ${options.map((opt, idx) => `<button class="mole-ask-user-option" data-index="${idx}">${escapeHtml(opt)}</button>`).join('')}
+        </div>`
+      : '';
+
+    // 构建文本输入行 HTML
+    const inputRowHtml = allowFreeText !== false
+      ? `<div class="mole-ask-user-input-row">
+          <input class="mole-ask-user-text" placeholder="${options && options.length > 0 ? '或者直接输入...' : '请输入你的回答...'}" />
+          <button class="mole-ask-user-submit">发送</button>
+        </div>`
+      : '';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'mole-ask-user-standalone';
+    wrapper.innerHTML = `
+      <div class="mole-ask-user-header-bar">
+        <img src="${LOGO_ASK_USER}" />
+        <span>Mole 有个问题</span>
+      </div>
+      <div class="mole-ask-user-card" data-request-id="${requestId}">
+        <div class="mole-ask-user-question">${escapeHtml(question)}</div>
+        ${optionsHtml}
+        ${inputRowHtml}
+      </div>
+    `;
+    resultEl.appendChild(wrapper);
+    showResult();
+
+    // 胶囊提示
+    showPillNotice('等待回答', 'info');
+
+    resultEl.scrollTop = resultEl.scrollHeight;
+    saveSnapshot();
+  };
+
+  /** 禁用提问卡片并显示回答结果 */
+  const disableAskUserCard = (requestId: string, answer: string, source: 'option' | 'text') => {
+    const card = resultEl.querySelector(`.mole-ask-user-card[data-request-id="${requestId}"]`) as HTMLElement;
+    if (!card || card.classList.contains('settled')) return;
+
+    card.classList.add('settled');
+
+    // 禁用所有按钮和输入框
+    card.querySelectorAll('button').forEach(btn => {
+      (btn as HTMLButtonElement).disabled = true;
+    });
+    const textInput = card.querySelector('.mole-ask-user-text') as HTMLInputElement;
+    if (textInput) textInput.disabled = true;
+
+    // 高亮选中的选项
+    if (source === 'option') {
+      card.querySelectorAll('.mole-ask-user-option').forEach(btn => {
+        if (btn.textContent === answer) {
+          btn.classList.add('selected');
+        }
+      });
+    }
+
+    // 添加结果提示
+    const resultText = document.createElement('div');
+    resultText.className = 'mole-ask-user-result';
+    resultText.textContent = `已回答：${answer}`;
+    card.appendChild(resultText);
+
+    // 更新外层卡片状态
+    const standalone = card.closest('.mole-ask-user-standalone') as HTMLElement;
+    if (standalone) {
+      standalone.classList.add('settled');
+      const titleEl = standalone.querySelector('.mole-ask-user-header-bar span') as HTMLElement;
+      if (titleEl) titleEl.textContent = '已回答';
+    }
+
+    saveSnapshot();
+  };
+
+  /** 取消提问卡片 */
+  const handleAskUserCancel = (requestId: string) => {
+    if (!requestId) return;
+    const card = resultEl.querySelector(`.mole-ask-user-card[data-request-id="${requestId}"]`) as HTMLElement;
+    if (!card || card.classList.contains('settled')) return;
+
+    card.classList.add('settled');
+    card.querySelectorAll('button').forEach(btn => {
+      (btn as HTMLButtonElement).disabled = true;
+    });
+    const textInput = card.querySelector('.mole-ask-user-text') as HTMLInputElement;
+    if (textInput) textInput.disabled = true;
+
+    const resultText = document.createElement('div');
+    resultText.className = 'mole-ask-user-result';
+    resultText.textContent = '已取消';
+    card.appendChild(resultText);
+
+    const standalone = card.closest('.mole-ask-user-standalone') as HTMLElement;
+    if (standalone) {
+      standalone.classList.add('settled');
+      const titleEl = standalone.querySelector('.mole-ask-user-header-bar span') as HTMLElement;
+      if (titleEl) titleEl.textContent = '已取消';
+    }
+
+    saveSnapshot();
+  };
+
   const directEventHandlers: Record<string, (content: string) => void> = {
     turn_started: handleTurnStartedEvent,
     turn_completed: handleTurnCompletedEvent,
@@ -2891,6 +3015,25 @@ export const initFloatBall = async () => {
     if (confirmBtn) confirmBtn.click();
   });
 
+  // 注册提问请求/取消监听（ask_user）
+  Channel.on('__ask_user_request', (data: any) => {
+    handleAskUserRequest(data?.requestId, data?.question, data?.options, data?.allowFreeText);
+  });
+  Channel.on('__ask_user_cancel', (data: any) => {
+    handleAskUserCancel(data?.requestId);
+  });
+
+  // 提问卡片文本输入框 Enter 键提交
+  resultEl.addEventListener('keydown', (e) => {
+    const target = e.target as HTMLElement;
+    if (e.key !== 'Enter' || !target.classList.contains('mole-ask-user-text')) return;
+    e.preventDefault();
+    const card = target.closest('.mole-ask-user-card') as HTMLElement;
+    if (!card || card.classList.contains('settled')) return;
+    const submitBtn = card.querySelector('.mole-ask-user-submit') as HTMLElement;
+    if (submitBtn) submitBtn.click();
+  });
+
   // 注册定时器触发事件监听：自动创建任务以接收后续的 AI 流式事件
   Channel.on('__ai_timer_trigger', (data: any) => {
     if (!data?.taskId || !data?.action) return;
@@ -3262,6 +3405,34 @@ export const initFloatBall = async () => {
         Channel.send('__approval_response', { requestId, approved: false, userMessage });
         disableApprovalCard(card, false);
       }
+      return;
+    }
+
+    // 2.5 提问卡片选项点击（ask_user）
+    const askUserOption = target.closest('.mole-ask-user-option') as HTMLElement | null;
+    if (askUserOption) {
+      const card = askUserOption.closest('.mole-ask-user-card') as HTMLElement;
+      if (!card || card.classList.contains('settled')) return;
+      const requestId = card.getAttribute('data-request-id');
+      if (!requestId) return;
+      const answer = askUserOption.textContent || '';
+      Channel.send('__ask_user_response', { requestId, answer, source: 'option' });
+      disableAskUserCard(requestId, answer, 'option');
+      return;
+    }
+
+    // 2.6 提问卡片发送按钮点击（ask_user）
+    const askUserSubmit = target.closest('.mole-ask-user-submit') as HTMLElement | null;
+    if (askUserSubmit) {
+      const card = askUserSubmit.closest('.mole-ask-user-card') as HTMLElement;
+      if (!card || card.classList.contains('settled')) return;
+      const requestId = card.getAttribute('data-request-id');
+      if (!requestId) return;
+      const textInput = card.querySelector('.mole-ask-user-text') as HTMLInputElement;
+      const answer = textInput?.value?.trim() || '';
+      if (!answer) return; // 空文本不提交
+      Channel.send('__ask_user_response', { requestId, answer, source: 'text' });
+      disableAskUserCard(requestId, answer, 'text');
       return;
     }
 

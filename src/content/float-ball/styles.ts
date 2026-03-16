@@ -2036,6 +2036,148 @@ export const getStyles = () => `
     }
   }
 
+  /* ===== 提问卡片（ask_user）===== */
+
+  .mole-ask-user-standalone {
+    margin: 10px 0;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(238, 242, 255, 0.95), rgba(199, 210, 254, 0.55));
+    border: 1.5px solid rgba(79, 70, 229, 0.22);
+    box-shadow: 0 4px 20px rgba(79, 70, 229, 0.08);
+    animation: mole-ask-user-fadein 0.35s ease-out;
+    overflow: hidden;
+  }
+  .mole-ask-user-header-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 11px 14px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgb(79, 70, 229);
+  }
+  .mole-ask-user-header-bar img {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+  .mole-ask-user-standalone .mole-ask-user-card {
+    margin: 8px 14px 14px;
+    padding: 0;
+    background: none;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  .mole-ask-user-standalone.settled {
+    opacity: 0.65;
+    animation: none;
+    border-color: var(--ec-border);
+    background: var(--ec-bg-soft);
+  }
+  .mole-ask-user-standalone.settled .mole-ask-user-header-bar {
+    color: var(--ec-text-muted);
+  }
+  @keyframes mole-ask-user-fadein {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .mole-ask-user-question {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ec-text);
+    margin-bottom: 10px;
+    word-break: break-word;
+  }
+  .mole-ask-user-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .mole-ask-user-option {
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(79, 70, 229, 0.2);
+    background: rgba(79, 70, 229, 0.06);
+    color: rgb(79, 70, 229);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    line-height: 1.4;
+  }
+  .mole-ask-user-option:hover {
+    background: rgba(79, 70, 229, 0.12);
+    border-color: rgba(79, 70, 229, 0.32);
+    transform: translateY(-1px);
+  }
+  .mole-ask-user-option:active {
+    transform: translateY(0);
+  }
+  .mole-ask-user-option.selected {
+    background: rgb(79, 70, 229);
+    color: #fff;
+    border-color: rgb(79, 70, 229);
+  }
+  .mole-ask-user-option:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+    transform: none;
+  }
+  .mole-ask-user-input-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .mole-ask-user-text {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--ec-border);
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--ec-text);
+    line-height: 1.4;
+  }
+  .mole-ask-user-text:focus {
+    border-color: rgb(79, 70, 229);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+  }
+  .mole-ask-user-text:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .mole-ask-user-submit {
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: none;
+    background: rgb(79, 70, 229);
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: opacity 0.15s;
+    line-height: 1.4;
+    flex-shrink: 0;
+  }
+  .mole-ask-user-submit:hover { opacity: 0.85; }
+  .mole-ask-user-submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .mole-ask-user-card.settled {
+    opacity: 0.7;
+  }
+  .mole-ask-user-result {
+    font-size: 12px;
+    margin-top: 6px;
+    color: var(--ec-text-muted);
+  }
+
   /* ===== Workflow 快捷操作卡片 ===== */
 
   .mole-workflow-hints {

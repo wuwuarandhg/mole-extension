@@ -44,6 +44,7 @@ import { cdpOverlayFunction } from './cdp-overlay';
 import { extractDataFunction } from './extract-data';
 import { dataPipelineFunction } from './data-pipeline';
 import { requestConfirmationFunction } from './request-confirmation';
+import { askUserFunction } from './ask-user';
 import { saveWorkflowFunction } from './save-workflow';
 
 const DYNAMIC_TOOL_STORAGE_KEY = 'mole_dynamic_tools_v1';
@@ -120,6 +121,7 @@ const BUILTIN_FUNCTIONS: FunctionDefinition[] = [
   extractDataFunction,
   dataPipelineFunction,
   requestConfirmationFunction,
+  askUserFunction,
   saveWorkflowFunction,
 ];
 

@@ -121,6 +121,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `extract-data.ts` - 结构化数据提取（auto/table/list/repeat/schema 五种模式）
 - `data-pipeline.ts` - 数据管道（缓冲区管理 + 转换 + JSON/CSV/Markdown/TSV 导出）
 - `request-confirmation.ts` - 人机确认节点（AI 驱动的操作前用户授权）
+- `ask-user.ts` - AI 主动提问节点（向用户提出问题并等待回答，支持选项和自由文本）
 - `save-workflow.ts` - 保存工作流（录制确认后 AI 调用保存）
 - `tab-navigate.ts` - 标签页导航控制（open/close/switch/list/navigate 等 13 种操作）
 - `tab-utils.ts` - Tab 工具函数（等待加载、隐藏 tab 操作等）
