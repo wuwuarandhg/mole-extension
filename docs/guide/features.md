@@ -147,6 +147,7 @@ Mole has visual understanding capabilities. When the `screenshot` tool is called
 - Up to 3 screenshot images per task to control context size
 - Images are automatically stripped during context compression, replaced with text placeholders
 - Prefer `page_snapshot` / `page_skeleton` for structured data; use visual analysis as a supplement
+- The floating ball is automatically hidden during screenshots to avoid obscuring page content
 
 ## Task Recovery
 
