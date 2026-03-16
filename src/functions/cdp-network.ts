@@ -155,7 +155,7 @@ export const cdpNetworkFunction: FunctionDefinition = {
     let tabId: number;
     if (typeof tab_id === 'number' && Number.isFinite(tab_id)) {
       tabId = tab_id;
-    } else if (typeof context?.tabId === 'number') {
+    } else if (typeof context?.tabId === 'number' && context.tabId > 0) {
       tabId = context.tabId;
     } else {
       const activeTabId = await getActiveTabId();

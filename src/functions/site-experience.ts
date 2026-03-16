@@ -137,7 +137,7 @@ const getDomainFromUrl = (url: string): string | null => {
 
 export const resolveSiteExperienceDomain = async (context?: ToolExecutionContext): Promise<string | null> => {
   try {
-    if (typeof context?.tabId === 'number') {
+    if (typeof context?.tabId === 'number' && context.tabId > 0) {
       const tab = await chrome.tabs.get(context.tabId);
       return getDomainFromUrl(tab.url || tab.pendingUrl || '');
     }

@@ -139,7 +139,7 @@ export const screenshotFunction: FunctionDefinition = {
 
       if (typeof tab_id === 'number' && Number.isFinite(tab_id)) {
         targetTab = await chrome.tabs.get(tab_id);
-      } else if (typeof context?.tabId === 'number') {
+      } else if (typeof context?.tabId === 'number' && context.tabId > 0) {
         targetTab = await chrome.tabs.get(context.tabId);
       } else {
         targetTab = currentActiveTab;
