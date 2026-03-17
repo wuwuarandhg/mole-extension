@@ -117,45 +117,52 @@ export const executeToolCalls = async (
     return null;
   };
 
-  /** 执行单个工具调用（不含 emit function_call，由调用方控制） */
+  /**
+   * 串行处理敏感操作确认
+   * 返回 null 表示已通过（或无需确认），返回 string 表示被拒绝（值为 output）
+   */
+  const resolveSensitiveApproval = async (
+    call: OutputFunctionCallItem,
+  ): Promise<string | null> => {
+    const params = safeParseArgs(call.arguments);
+    const approvalMessage = getSensitiveApprovalMessage(call.name, params);
+    if (!approvalMessage || sensitiveAccessTrusted) return null;
+
+    const approvalResult = await requestConfirmationFunction.execute(
+      { message: approvalMessage },
+      { tabId, signal },
+    );
+    const approved = approvalResult.success && approvalResult.data?.approved;
+    // 用户选择"本次不再询问"时，后续自动跳过确认
+    if (approved && approvalResult.data?.trustAll) {
+      sensitiveAccessTrusted = true;
+    }
+    if (approved) return null;
+
+    // 被拒绝：emit 结果并返回 output
+    const output = JSON.stringify({
+      success: false,
+      error: approvalResult.data?.userMessage || '用户拒绝了敏感数据访问请求',
+    });
+    emit({
+      type: 'function_result',
+      content: JSON.stringify({
+        name: call.name,
+        callId: call.call_id,
+        success: false,
+        message: '用户拒绝',
+        cancelled: false,
+      }),
+    });
+    return output;
+  };
+
+  /** 执行单个工具调用（不含 emit function_call，由调用方控制；确认已在外部完成） */
   const executeSingleTool = async (
     call: OutputFunctionCallItem,
   ): Promise<{ call: OutputFunctionCallItem; output: string }> => {
     const params = safeParseArgs(call.arguments);
     let output: string;
-
-    // ── 敏感操作拦截：自动请求用户确认 ──
-    const approvalMessage = getSensitiveApprovalMessage(call.name, params);
-    if (approvalMessage && !sensitiveAccessTrusted) {
-      const approvalResult = await requestConfirmationFunction.execute(
-        { message: approvalMessage },
-        { tabId, signal },
-      );
-      const approved = approvalResult.success && approvalResult.data?.approved;
-      // 用户选择"本次不再询问"时，后续自动跳过确认
-      if (approved && approvalResult.data?.trustAll) {
-        sensitiveAccessTrusted = true;
-      }
-      if (!approved) {
-        output = JSON.stringify({
-          success: false,
-          error: approvalResult.data?.userMessage || '用户拒绝了敏感数据访问请求',
-        });
-
-        emit({
-          type: 'function_result',
-          content: JSON.stringify({
-            name: call.name,
-            callId: call.call_id,
-            success: false,
-            message: '用户拒绝',
-            cancelled: false,
-          }),
-        });
-
-        return { call, output };
-      }
-    }
 
     if (call.name === 'spawn_subtask' && runSubtask) {
       // 子任务递归
@@ -237,6 +244,13 @@ export const executeToolCalls = async (
       for (const call of group.calls) {
         if (signal?.aborted) break;
 
+        // 串行路径：先确认再执行
+        const rejected = await resolveSensitiveApproval(call);
+        if (rejected) {
+          results.push({ type: 'function_call_output' as const, call_id: call.call_id, output: rejected });
+          continue;
+        }
+
         emit({
           type: 'function_call',
           content: JSON.stringify({
@@ -255,8 +269,20 @@ export const executeToolCalls = async (
         });
       }
     } else {
-      // 并行执行：先 emit 所有 function_call 事件，再并发执行
+      // 并行执行：先串行完成所有敏感操作确认，再并发执行工具
+      const approvedCalls: OutputFunctionCallItem[] = [];
       for (const call of group.calls) {
+        if (signal?.aborted) break;
+        const rejected = await resolveSensitiveApproval(call);
+        if (rejected) {
+          results.push({ type: 'function_call_output' as const, call_id: call.call_id, output: rejected });
+        } else {
+          approvedCalls.push(call);
+        }
+      }
+
+      // emit 所有已通过确认的 function_call 事件
+      for (const call of approvedCalls) {
         emit({
           type: 'function_call',
           content: JSON.stringify({
@@ -267,9 +293,9 @@ export const executeToolCalls = async (
         });
       }
 
-      // Promise.all 并发执行，按完成顺序 emit function_result
+      // Promise.all 并发执行
       const groupResults = await Promise.all(
-        group.calls.map((call) => executeSingleTool(call)),
+        approvedCalls.map((call) => executeSingleTool(call)),
       );
 
       // 按原始 calls 顺序 push 到 results（保持与输入顺序一致）

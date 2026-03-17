@@ -1735,13 +1735,18 @@ export const getStyles = () => `
     border-radius: 0;
   }
   .mole-approval-standalone.settled {
-    opacity: 0.65;
+    opacity: 0.75;
     animation: none;
     border-color: var(--ec-border);
     background: var(--ec-bg-soft);
+    transition: opacity 0.3s ease;
   }
   .mole-approval-standalone.settled .mole-approval-header-bar {
     color: var(--ec-text-muted);
+    padding-bottom: 10px;
+  }
+  .mole-approval-standalone.settled .mole-approval-card {
+    display: none;
   }
   @keyframes mole-approval-fadein {
     from { opacity: 0; transform: translateY(8px); }

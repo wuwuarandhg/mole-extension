@@ -171,7 +171,7 @@ const MAX_SESSIONS = 10;
 const SESSION_RUNTIME_STORAGE_KEY = 'mole_session_runtime_v1';
 const MAX_RUNTIME_EVENT_LOG = 500;
 const MAX_RUNTIME_CONTEXT = 280;
-const MAX_MODEL_CONTEXT_ITEMS = 180;
+const MAX_MODEL_CONTEXT_ITEMS = 250;
 const COMPACT_USER_CONTEXT_LIMIT = 10;
 const COMPACT_USER_CONTEXT_CHAR_LIMIT = 6000;
 const SESSION_CONTEXT_COMPRESSION_TAG = '[mole-context-compressed]';
@@ -549,8 +549,8 @@ function extractExecuteSessionOptions(raw: any): Partial<ExecuteSessionOptions> 
         : [];
     return {
         disallowTools: disallowTools.length > 0 ? disallowTools : undefined,
-        maxRounds: normalizeExecuteNumberOption(raw.maxRounds, 1, 80),
-        maxToolCalls: normalizeExecuteNumberOption(raw.maxToolCalls, 1, 200),
+        maxRounds: normalizeExecuteNumberOption(raw.maxRounds, 1, 120),
+        maxToolCalls: normalizeExecuteNumberOption(raw.maxToolCalls, 1, 300),
         maxSameToolCalls: normalizeExecuteNumberOption(raw.maxSameToolCalls, 1, 20),
         appendUserQuery: raw.appendUserQuery === false ? false : undefined,
         suppressNextStepHint: raw.suppressNextStepHint === true ? true : undefined,
@@ -3034,9 +3034,9 @@ async function handleTimerTrigger(timerId: string, source: 'alarm' | 'runtime_ti
                 await runSessionNow(session, task.action, task.tabId, {
                     coalesceKey,
                     disallowTools: ['timer'],
-                    maxRounds: 12,
-                    maxToolCalls: 30,
-                    maxSameToolCalls: 3,
+                    maxRounds: 20,
+                    maxToolCalls: 50,
+                    maxSameToolCalls: 5,
                     taskKind: 'aux',
                 });
             });

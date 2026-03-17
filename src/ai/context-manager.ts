@@ -133,7 +133,7 @@ export const compactContext = (
  * 工具结果截断
  * 如果工具返回结果超过指定长度，只保留前 N 字符 + 提示
  */
-export const truncateToolResult = (output: string, maxChars: number = 4000): string => {
+export const truncateToolResult = (output: string, maxChars: number = 8000): string => {
   if (output.length <= maxChars) return output;
   return output.slice(0, maxChars) + '\n\n[结果过长，已截断。如需完整内容请再次查询指定部分]';
 };

@@ -84,7 +84,14 @@
       "Bash(grep -r \"request_confirmation\" /Users/clark/MySpace/mole-extension/src --include=\"*.ts\" -l 2>/dev/null | head -5)",
       "Bash(done)",
       "Bash(test -f /Users/clark/MySpace/mole-extension/src/functions/save-workflow.ts && echo \"EXISTS\" || echo \"NOT EXISTS\")",
-      "Bash(wc -l /Users/clark/MySpace/mole-extension/src/content/float-ball.ts /Users/clark/MySpace/mole-extension/src/background.ts /Users/clark/MySpace/mole-extension/src/content/float-ball/*.ts /Users/clark/MySpace/mole-extension/src/background/*.ts)"
+      "Bash(wc -l /Users/clark/MySpace/mole-extension/src/content/float-ball.ts /Users/clark/MySpace/mole-extension/src/background.ts /Users/clark/MySpace/mole-extension/src/content/float-ball/*.ts /Users/clark/MySpace/mole-extension/src/background/*.ts)",
+      "Bash(git -C /Users/clark/MySpace/mole-extension diff --name-only)",
+      "Bash(git -C /Users/clark/MySpace/mole-extension diff)",
+      "Bash(for f in src/functions/cdp-console.ts src/functions/cdp-css.ts src/functions/cdp-dialog.ts src/functions/cdp-dom.ts src/functions/cdp-emulation.ts src/functions/cdp-fetch.ts src/functions/cdp-frame.ts src/functions/cdp-input.ts src/functions/cdp-network.ts src/functions/cdp-overlay.ts src/functions/cdp-storage.ts src/functions/dom-manipulate.ts src/functions/extract-data.ts src/functions/page-action.ts src/functions/page-skeleton.ts src/functions/page-snapshot.ts src/functions/page-viewer.ts src/functions/screenshot.ts src/functions/site-experience.ts; do sed -i '' \"s/typeof context?.tabId === 'number'/typeof context?.tabId === 'number' \\\\&\\\\& context.tabId > 0/g\" \"$f\"; done && echo \"done\")",
+      "Bash(for f in src/functions/screenshot.ts src/functions/page-viewer.ts src/functions/page-snapshot.ts src/functions/page-skeleton.ts src/functions/page-action.ts src/functions/extract-data.ts src/functions/dom-manipulate.ts src/functions/cdp-storage.ts src/functions/cdp-overlay.ts src/functions/cdp-network.ts src/functions/cdp-input.ts src/functions/cdp-frame.ts src/functions/cdp-fetch.ts src/functions/cdp-emulation.ts src/functions/cdp-dom.ts src/functions/cdp-dialog.ts src/functions/cdp-css.ts src/functions/cdp-console.ts; do sed -i '' \"s/typeof tab_id === 'number' && Number.isFinite\\(tab_id\\)/typeof tab_id === 'number' \\\\&\\\\& tab_id > 0/g\" \"$f\"; done && echo \"done\")",
+      "Bash(git -C /Users/clark/MySpace/mole-extension tag -l)",
+      "Bash(gh release list --limit 5 2>/dev/null || echo \"No releases found or gh not configured\")",
+      "Bash(gh repo view --json name,url,isPrivate 2>/dev/null || echo \"Could not get repo info\")"
     ],
     "deny": [],
     "ask": []

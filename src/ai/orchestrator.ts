@@ -94,10 +94,10 @@ export interface HandleChatOptions {
 // ============ 默认配置 ============
 
 const DEFAULT_BUDGET: LoopBudget = {
-  maxRounds: 30,
-  maxToolCalls: 60,
-  maxSameSignature: 3,
-  maxContextItems: 200,
+  maxRounds: 50,
+  maxToolCalls: 120,
+  maxSameSignature: 5,
+  maxContextItems: 300,
   maxSubtaskDepth: 2,
 };
 
@@ -365,7 +365,7 @@ const agenticLoop = async (
         ? (goal: string, subtaskSignal?: AbortSignal) => {
             const subContext: InputItem[] = [{ role: 'user' as const, content: goal }];
             const subTools = tools.filter(t => t.name !== 'spawn_subtask');
-            const subBudget = { ...budget, maxRounds: Math.min(budget.maxRounds, 15), maxSubtaskDepth: budget.maxSubtaskDepth };
+            const subBudget = { ...budget, maxRounds: Math.min(budget.maxRounds, 25), maxSubtaskDepth: budget.maxSubtaskDepth };
             return agenticLoop(
               subContext, subTools, buildSubtaskPrompt(), subBudget,
               tabId, subtaskSignal || signal, emit, undefined, depth + 1,

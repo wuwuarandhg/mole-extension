@@ -91,7 +91,7 @@ export const chatComplete = async (
   const body: Record<string, any> = {
     model: settings.model,
     input,
-    max_output_tokens: 4096,
+    max_output_tokens: 16384,
   };
   if (instructions) {
     body.instructions = instructions;
@@ -161,7 +161,7 @@ export async function* chatStream(
   const body: Record<string, any> = {
     model: settings.model,
     input,
-    max_output_tokens: 4096,
+    max_output_tokens: 16384,
     stream: true,
   };
   if (instructions) {
