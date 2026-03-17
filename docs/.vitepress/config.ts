@@ -16,6 +16,7 @@ export default defineConfig({
         nav: [
           { text: 'Home', link: '/' },
           { text: 'Guide', link: '/guide/getting-started' },
+          { text: 'Download', link: '/download' },
           { text: 'GitHub', link: 'https://github.com/clark-maybe/mole-extension' },
         ],
         sidebar: {
@@ -70,6 +71,7 @@ export default defineConfig({
         nav: [
           { text: '首页', link: '/zh/' },
           { text: '指南', link: '/zh/guide/getting-started' },
+          { text: '下载', link: '/zh/download' },
           { text: 'GitHub', link: 'https://github.com/clark-maybe/mole-extension' },
         ],
         sidebar: {
