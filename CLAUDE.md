@@ -126,9 +126,13 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `save-workflow.ts` - 保存工作流（录制确认后 AI 调用保存）
 - `tab-navigate.ts` - 标签页导航控制（open/close/switch/list/navigate 等 13 种操作）
 - `tab-utils.ts` - Tab 工具函数（等待加载、隐藏 tab 操作等）
+- `skill.ts` - Skill 工具入口（动态 schema 生成 + 执行分发，替代旧 site_workflow）
+- `skill-types.ts` - Skill 类型定义（SkillSpec、WorkflowEntry）
+- `skill-registry.ts` - Skill 注册表（两层架构：全局 + 域级，同步/缓存/增删改查）
+- `skill-matcher.ts` - Skill URL 匹配器（全局始终匹配，域级按 url_patterns 匹配）
 
 **跨标签页操作说明：**
-所有需要操作页面的工具（page_viewer、page_snapshot、page_skeleton、cdp_input、cdp_dom、cdp_frame、extract_data、site_workflow 以及其他 CDP 工具）均支持可选的 `tab_id` 参数。tabId 解析优先级：`params.tab_id` > `context.tabId`（编排器注入） > 当前活动标签页。AI 通过 `tab_navigate(action='open')` 获取新 tab 的 `tab_id`，然后在后续工具调用中传入该 id 即可操作目标标签页。
+所有需要操作页面的工具（page_viewer、page_snapshot、page_skeleton、cdp_input、cdp_dom、cdp_frame、extract_data、skill 以及其他 CDP 工具）均支持可选的 `tab_id` 参数。tabId 解析优先级：`params.tab_id` > `context.tabId`（编排器注入） > 当前活动标签页。AI 通过 `tab_navigate(action='open')` 获取新 tab 的 `tab_id`，然后在后续工具调用中传入该 id 即可操作目标标签页。
 
 #### CDP 会话管理器 (`src/lib/cdp-session.ts`)
 

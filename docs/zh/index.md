@@ -36,3 +36,7 @@ features:
     title: 开源免费
     details: AGPL-3.0 协议，完全开源，社区驱动。欢迎贡献代码、提交 Issue 和 PR。
 ---
+
+<div style="text-align: center; padding: 2rem 1rem 1rem; color: var(--vp-c-text-2); font-size: 0.95rem;">
+  <p>本项目在 <a href="https://linux.do" target="_blank" rel="noopener" style="color: var(--vp-c-brand-1); font-weight: 500;">linux.do</a> 社区发起，感谢社区成员的反馈与支持。</p>
+</div>

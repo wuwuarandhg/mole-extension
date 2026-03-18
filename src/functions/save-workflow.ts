@@ -1,5 +1,6 @@
 import type { FunctionDefinition, FunctionResult } from './types';
-import { upsertUserWorkflow } from './site-workflow-registry';
+import { upsertUserWorkflow as upsertOldUserWorkflow } from './site-workflow-registry';
+import { upsertUserWorkflow as upsertSkillUserWorkflow } from './skill-registry';
 import { getBuiltinFunction } from './registry';
 
 // 保存用户确认的工作流
@@ -58,7 +59,10 @@ export const saveWorkflowFunction: FunctionDefinition = {
       createdAt: workflow.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
-    const result = await upsertUserWorkflow(spec);
-    return { success: result.success, data: result.message, error: result.success ? undefined : result.message };
+    // 保存到新 Skill 注册表
+    const skillResult = await upsertSkillUserWorkflow(spec);
+    // 同时保存到旧注册表（向后兼容）
+    await upsertOldUserWorkflow(spec);
+    return { success: skillResult.success, data: skillResult.message, error: skillResult.success ? undefined : skillResult.message };
   },
 };

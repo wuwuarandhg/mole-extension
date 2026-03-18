@@ -27,6 +27,7 @@ import { historySearchFunction } from './history-search';
 import { downloadFileFunction } from './download-file';
 import { residentRuntimeFunction } from './resident-runtime';
 import { siteWorkflowFunction } from './site-workflow';
+import { skillFunction } from './skill';
 import { cdpInputFunction } from './cdp-input';
 import { cdpDialogFunction } from './cdp-dialog';
 import { cdpFrameFunction } from './cdp-frame';
@@ -99,6 +100,7 @@ const BUILTIN_FUNCTIONS: FunctionDefinition[] = [
   downloadFileFunction,
   residentRuntimeFunction,
   siteWorkflowFunction,
+  skillFunction,
   cdpInputFunction,
   cdpDialogFunction,
   cdpFrameFunction,

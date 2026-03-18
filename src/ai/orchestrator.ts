@@ -32,6 +32,8 @@ import { buildSystemPrompt, buildSubtaskPrompt } from './system-prompt';
 import { ensureToolRegistryReady, mcpClient } from '../functions/registry';
 import { mcpToolsToSchema } from '../mcp/adapters';
 import { buildSiteWorkflowSchema } from '../functions/site-workflow';
+import { buildSkillContext } from '../functions/skill';
+import type { SkillGuideEntry, SkillCatalogEntry } from '../functions/skill';
 
 // ============ 类型定义 ============
 
@@ -471,30 +473,43 @@ export const handleChat = async (
     tools = tools.filter(t => !disallowed.has(t.name));
   }
 
-  // 动态注入 site_workflow（根据当前 tab URL 匹配可用 workflow）
+  // 动态注入 skill（根据当前 tab URL 匹配可用 Skill + workflow）
+  let domainGuides: SkillGuideEntry[] = [];
+  let globalCatalog: SkillCatalogEntry[] = [];
   try {
     let tabUrl = '';
     if (typeof chrome !== 'undefined' && chrome.tabs && tabId && Number.isFinite(tabId)) {
       const tab = await chrome.tabs.get(tabId);
       tabUrl = tab?.url || '';
     }
+
+    const skillContext = await buildSkillContext(tabUrl);
+    domainGuides = skillContext.domainGuides;
+    globalCatalog = skillContext.globalCatalog;
+
+    if (skillContext.schema) {
+      // 替换静态的 skill schema 为动态版本
+      tools = tools.filter(t => t.name !== 'skill');
+      tools.push(skillContext.schema);
+    }
+
+    // 向后兼容：如果旧代码仍使用 site_workflow，也尝试注入
     if (tabUrl) {
       const siteWorkflowSchema = await buildSiteWorkflowSchema(tabUrl);
       if (siteWorkflowSchema) {
-        // 替换静态的 site_workflow schema 为动态版本
         tools = tools.filter(t => t.name !== 'site_workflow');
         tools.push(siteWorkflowSchema);
       }
     }
   } catch {
-    // site_workflow 注入失败不影响正常工具链
+    // skill 注入失败不影响正常工具链
   }
 
   // 注入 spawn_subtask（只有顶层才有）
   tools.push(SPAWN_SUBTASK_SCHEMA);
 
-  // 构建系统提示词
-  const systemPrompt = buildSystemPrompt(tools, true);
+  // 构建系统提示词（域级 guide 直接注入，全局只放目录）
+  const systemPrompt = buildSystemPrompt(tools, true, domainGuides, globalCatalog);
 
   // 构建初始上下文
   const context: InputItem[] = previousContext ? [...previousContext] : [];

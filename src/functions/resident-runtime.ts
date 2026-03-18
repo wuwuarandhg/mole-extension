@@ -1,5 +1,6 @@
 import type { FunctionDefinition, FunctionResult, ToolExecutionContext } from './types';
 import { getSiteWorkflow } from './site-workflow-registry';
+import { getWorkflowByName } from './skill-registry';
 import { executeDebugRemotePlan } from './remote-workflow';
 
 const RESIDENT_RUNTIME_STORAGE_KEY = 'mole_resident_runtime_jobs_v1';
@@ -229,8 +230,22 @@ const executeDetection = async (job: ResidentJob): Promise<FunctionResult> => {
   if (!job.siteWorkflow) {
     return { success: false, error: '未配置 siteWorkflow' };
   }
+
+  // 优先从新 Skill 注册表查找
+  const skillWf = await getWorkflowByName(job.siteWorkflow);
+  if (skillWf) {
+    const defaults = extractDefaults(skillWf.parameters);
+    return executeDebugRemotePlan(
+      job.siteWorkflow,
+      skillWf.plan,
+      { ...defaults, ...job.params },
+      { tabId: job.tabId },
+    );
+  }
+
+  // 回退：兼容旧 site-workflow 注册表
   const spec = await getSiteWorkflow(job.siteWorkflow);
-  if (!spec) return { success: false, error: `site workflow 不存在: ${job.siteWorkflow}` };
+  if (!spec) return { success: false, error: `workflow 不存在: ${job.siteWorkflow}` };
   const defaults = extractDefaults(spec.parameters);
   return executeDebugRemotePlan(
     job.siteWorkflow,

@@ -13,6 +13,7 @@ const LEGACY_TOOL_NAME_MAP: Record<string, string> = {
   dom_manipulate: 'cdp_dom',
   cdp_css: 'cdp_dom',
   cdp_storage: 'cdp_dom',
+  site_workflow: 'skill',
 };
 
 /** 按名称查找内置工具，支持旧名称自动映射 */

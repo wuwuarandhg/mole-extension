@@ -21,6 +21,8 @@ import {
 } from './functions/remote-workflow';
 import { listSiteWorkflows, reloadRegistryFromStore } from './functions/site-workflow-registry';
 import { matchWorkflows } from './functions/site-workflow-matcher';
+import { listAllSkills } from './functions/skill-registry';
+import { matchSkills } from './functions/skill-matcher';
 import { setupRecorderHandlers } from './background/workflow-recorder';
 import { setupBgTasksHandlers, broadcastBgTasksChanged } from './background/bg-tasks-manager';
 import { handleChat } from './ai/orchestrator';
@@ -3738,12 +3740,39 @@ Channel.on('__session_replay_request', (data, sender, sendResponse) => {
 Channel.on('__site_workflows_match', (data, _sender, sendResponse) => {
     void (async () => {
         const url = String(data?.url || '').trim();
+
+        // 优先从新 Skill 注册表查询
+        const allSkills = await listAllSkills();
+        const matched = matchSkills(url, allSkills);
+        // 域级 Skill 的 workflow 展示为卡片提示（全局 Skill 不展示，避免卡片过多）
+        const domainSkills = matched.filter(s => s.scope === 'domain');
+        const workflows = domainSkills.flatMap(s =>
+            s.workflows.map(w => ({
+                name: w.name,
+                label: w.label,
+                description: w.description,
+                skillLabel: s.label,
+                hasRequiredParams: Array.isArray(w.parameters?.required) && w.parameters.required.length > 0,
+            }))
+        );
+
+        if (workflows.length > 0) {
+            // 按 label 去重
+            const seenLabels = new Set<string>();
+            const deduped = workflows.filter(w => {
+                if (seenLabels.has(w.label)) return false;
+                seenLabels.add(w.label);
+                return true;
+            });
+            sendResponse?.({ success: true, workflows: deduped });
+            return;
+        }
+
+        // 回退：从旧 site-workflow 注册表查询（兼容）
         const allWorkflows = await listSiteWorkflows();
-        const matched = matchWorkflows(url, allWorkflows);
-        // 卡片提示过滤：url_patterns 全是通配符的 workflow 不在卡片中展示
+        const matchedOld = matchWorkflows(url, allWorkflows);
         const isUniversal = (p: string) => /^\*:\/\/\*\/\*$/.test(p.trim());
-        const hinted = matched.filter(w => !w.url_patterns.every(isUniversal));
-        // 按 label 去重（不同 name 但 label 相同的只保留第一个）
+        const hinted = matchedOld.filter(w => !w.url_patterns.every(isUniversal));
         const seenLabels = new Set<string>();
         const deduped = hinted.filter(w => {
             if (seenLabels.has(w.label)) return false;

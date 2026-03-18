@@ -5,12 +5,59 @@
  */
 
 import type { ToolSchema } from './types';
+import type { SkillGuideEntry, SkillCatalogEntry } from '../functions/skill';
+
+/**
+ * 构建 Skill 上下文注入段落
+ *
+ * 混合策略：
+ *   全局 Skill → 只放目录（名称+描述），AI 用 skill(action='detail') 按需查看
+ *   域级 Skill → 直接注入完整 guide（数量少，高度相关，零延迟使用）
+ */
+const buildSkillSection = (
+  domainGuides?: SkillGuideEntry[],
+  globalCatalog?: SkillCatalogEntry[],
+): string => {
+  const hasDomain = domainGuides && domainGuides.length > 0;
+  const hasGlobal = globalCatalog && globalCatalog.length > 0;
+  if (!hasDomain && !hasGlobal) return '';
+
+  const parts: string[] = [];
+
+  // 域级 Skill：完整 guide 直接注入（高关联度，零延迟）
+  if (hasDomain) {
+    parts.push('\n\n## 当前网站技能\n');
+    parts.push('以下技能针对你正在操作的网站，优先使用：\n');
+    for (const g of domainGuides!) {
+      parts.push(`### ${g.skillLabel}`);
+      parts.push(g.guide);
+      parts.push('');
+    }
+  }
+
+  // 全局 Skill：只放目录，按需 detail
+  if (hasGlobal) {
+    parts.push('\n## 基础技能目录\n');
+    parts.push('以下技能在任何页面可用。使用 skill(action="detail", name="技能名") 查看详情后再执行：\n');
+    for (const cat of globalCatalog!) {
+      parts.push(`- **${cat.name}**: ${cat.description}（${cat.workflowCount} 个工作流）`);
+    }
+    parts.push('');
+  }
+
+  return parts.join('\n');
+};
 
 /**
  * 构建主系统提示词
  * 按任务复杂度四级分类引导模型自主决策
  */
-export const buildSystemPrompt = (tools: ToolSchema[], hasSubtask: boolean): string => {
+export const buildSystemPrompt = (
+  tools: ToolSchema[],
+  hasSubtask: boolean,
+  domainGuides?: SkillGuideEntry[],
+  globalCatalog?: SkillCatalogEntry[],
+): string => {
   const toolNames = tools.map(t => t.name);
 
   return `你是 Mole，一个运行在 Chrome 浏览器中的 AI 助手插件。你**只能**通过工具操作用户当前正在浏览的网页，你无法修改任何项目代码、无法访问用户的文件系统、无法运行终端命令。
@@ -18,7 +65,7 @@ export const buildSystemPrompt = (tools: ToolSchema[], hasSubtask: boolean): str
 ## 你能做什么
 - 查看、操作用户当前浏览的网页（点击、输入、滚动、截图等）
 - 在网页上搜索信息、提取内容
-- 通过预定义的站点工作流快速完成特定网站的操作
+- 通过预定义的技能工作流快速完成特定操作
 - 跨多个标签页协同操作（如在 A 页面查信息，在 B 页面填表）
 - 回答用户的问题
 
@@ -86,7 +133,7 @@ export const buildSystemPrompt = (tools: ToolSchema[], hasSubtask: boolean): str
 ## 工具使用原则
 
 ### 操作页面的优先级
-1. site_workflow — 首选：当前页面有匹配的预定义工作流时，优先使用，速度快且可靠
+1. skill — 首选：有匹配的预定义工作流时，优先使用，速度快且可靠。当前网站技能可直接 run；基础技能先 detail 查看再 run
 2. page_skeleton — 整体感知：先获取页面骨架了解布局和区域划分（200-500 tokens），再决定下一步
 3. page_snapshot(query=...) — 精确定位：基于骨架树信息定位具体操作元素
 4. cdp_input(element_id=...) — 基于 element_id 精确操作（优先）
@@ -181,7 +228,7 @@ export const buildSystemPrompt = (tools: ToolSchema[], hasSubtask: boolean): str
 ${toolNames.join('、')}
 
 ## 权限
-你拥有所有工具的完整权限，已获用户授权，直接使用即可。`;
+你拥有所有工具的完整权限，已获用户授权，直接使用即可。${buildSkillSection(domainGuides, globalCatalog)}`;
 };
 
 /**
@@ -199,7 +246,7 @@ export const buildSubtaskPrompt = (): string => {
 - 不要展开到其他话题
 
 ## 工具使用
-和主任务相同的工具使用原则。优先使用 site_workflow，其次 page_skeleton 了解结构，再 page_snapshot 定位，再 cdp_input 操作。
+和主任务相同的工具使用原则。优先使用 skill，其次 page_skeleton 了解结构，再 page_snapshot 定位，再 cdp_input 操作。
 
 ## 回复
 直接给出子任务的结果，供主任务汇总使用。中文回复。`;

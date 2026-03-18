@@ -73,6 +73,10 @@ npm run lint         # 代码检查
 npm run docs:dev     # 文档站本地预览
 ```
 
+## 致谢
+
+本项目在 [linux.do](https://linux.do) 社区发起，感谢社区成员的反馈与支持。
+
 ## 许可证
 
 [AGPL-3.0](LICENSE)

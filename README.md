@@ -73,6 +73,10 @@ npm run lint         # Lint check
 npm run docs:dev     # Local docs preview
 ```
 
+## Acknowledgements
+
+This project was initiated in the [linux.do](https://linux.do) community. Thanks to the community members for their feedback and support.
+
 ## License
 
 [AGPL-3.0](LICENSE)

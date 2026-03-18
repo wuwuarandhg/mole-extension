@@ -36,3 +36,7 @@ features:
     title: Open Source
     details: AGPL-3.0 licensed, fully open source, community-driven. Contributions, issues, and PRs are welcome.
 ---
+
+<div style="text-align: center; padding: 2rem 1rem 1rem; color: var(--vp-c-text-2); font-size: 0.95rem;">
+  <p>This project was initiated in the <a href="https://linux.do" target="_blank" rel="noopener" style="color: var(--vp-c-brand-1); font-weight: 500;">linux.do</a> community. Thanks to the community members for their feedback and support.</p>
+</div>
