@@ -23,14 +23,14 @@ npm install
 npm run build
 ```
 
-构建产物输出到 `build_version/mole-extension_1.0.0/` 目录。
+构建产物输出到 `build_version/mole-extension/` 目录。
 
 ### 4. 加载到 Chrome
 
 1. 打开 Chrome，访问 `chrome://extensions/`
 2. 开启右上角的 **开发者模式**
 3. 点击 **加载已解压的扩展程序**
-4. 选择 `build_version/mole-extension_1.0.0/` 目录
+4. 选择 `build_version/mole-extension/` 目录
 5. 扩展安装完成，图标出现在浏览器工具栏
 
 ## 首次使用

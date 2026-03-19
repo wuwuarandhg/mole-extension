@@ -12,7 +12,7 @@ export default defineConfig({
   },
   build: {
     emptyOutDir: false,
-    outDir: `build_version/${packageJson.name}_${packageJson.version}`,
+    outDir: `build_version/${packageJson.name}`,
     lib: {
       entry: resolve(__dirname, 'src/background.ts'),
       name: 'contentScript',

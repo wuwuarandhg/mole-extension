@@ -15,7 +15,7 @@ export default defineConfig({
   },
   build: {
     emptyOutDir: true,
-    outDir: `build_version/${packageJson.name}_${packageJson.version}`,
+    outDir: `build_version/${packageJson.name}`,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
