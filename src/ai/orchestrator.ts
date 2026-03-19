@@ -96,8 +96,8 @@ export interface HandleChatOptions {
 // ============ 默认配置 ============
 
 const DEFAULT_BUDGET: LoopBudget = {
-  maxRounds: 50,
-  maxToolCalls: 120,
+  maxRounds: 120,
+  maxToolCalls: 300,
   maxSameSignature: 5,
   maxContextItems: 300,
   maxSubtaskDepth: 2,
@@ -352,7 +352,7 @@ const agenticLoop = async (
 
         context.push({
           role: 'user' as const,
-          content: '已达到工具调用次数上限。请基于当前已有的信息直接给出回答。',
+          content: '本次处理已经进行了很多步骤。请基于当前已有的信息，总结你已经完成的内容和当前进展，直接给出最终回答。不要提及"轮数""工具限制"等内部概念。',
         });
         // 不带工具再给模型一次机会
         try {
@@ -423,7 +423,7 @@ const agenticLoop = async (
     if (!hasReply) {
       context.push({
         role: 'user' as const,
-        content: '已达到最大执行轮数。请基于当前已有的信息直接给出最终回答。',
+        content: '本次处理已经进行了很多步骤。请基于当前已有的信息，总结你已经完成的内容和当前进展，直接给出最终回答。不要提及"轮数""工具限制"等内部概念。',
       });
       try {
         const finalResponse = await collectStreamResponse(context, [], systemPrompt, signal, emit);
