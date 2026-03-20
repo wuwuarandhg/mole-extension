@@ -5,18 +5,12 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Button, Card, Form, Input, Modal, Typography, App } from 'antd';
-import { RocketOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { Button, Form, Input, Modal, Space, Typography, App } from 'antd';
+import { CheckCircleOutlined } from '@ant-design/icons';
 import { getAISettings, saveAISettings } from '../../ai/llm-client';
+import { OptionsPageLayout, OptionsSectionCard } from '../components/PageLayout';
 
 const { Title, Text, Paragraph } = Typography;
-
-/** 推荐模型列表 */
-const RECOMMENDED_MODELS = [
-  { name: 'gpt-5.4', desc: '最新旗舰模型，推荐使用' },
-  { name: 'gpt-5.2', desc: '高性价比，适合日常使用' },
-  { name: 'gpt-5.1', desc: '稳定可靠，资源占用低' },
-];
 
 /** 检查设置是否已配置（至少有 endpoint 和 apiKey） */
 const isConfigured = (s: { endpoint?: string; apiKey?: string }): boolean =>
@@ -29,6 +23,9 @@ export function LLMSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const endpoint = Form.useWatch('endpoint', form);
+  const apiKey = Form.useWatch('apiKey', form);
+  const model = Form.useWatch('model', form);
 
   /* 加载已保存的设置，判断是否需要引导 */
   useEffect(() => {
@@ -96,48 +93,83 @@ export function LLMSettingsPage() {
 
   if (!loaded) return null;
 
+  const configured = isConfigured({ endpoint, apiKey });
+  const endpointLabel = endpoint ? String(endpoint).replace(/^https?:\/\//, '') : '未配置';
+
   return (
     <>
-      <Title level={4} style={{ marginTop: 0, marginBottom: 20 }}>LLM 设置</Title>
-      <Card>
-        <Paragraph type="secondary" style={{ marginBottom: 24 }}>
-          Mole 通过 OpenAI 兼容接口与大语言模型通信。配置你的 API 地址、密钥和模型名称后，
-          即可在任意网页上使用 AI 助手。
-        </Paragraph>
-        <Form form={form} layout="vertical" style={{ maxWidth: 480 }}>
-          <Form.Item
-            label="Endpoint URL"
-            name="endpoint"
-            extra="API 服务地址，如 https://api.openai.com/v1"
-          >
-            <Input placeholder="https://api.openai.com/v1" />
-          </Form.Item>
-          <Form.Item
-            label="API Key"
-            name="apiKey"
-            extra="你的 API 密钥，仅存储在本地浏览器中"
-          >
-            <Input.Password placeholder="sk-..." />
-          </Form.Item>
-          <Form.Item
-            label="Model"
-            name="model"
-            extra={
-              <span>
-                推荐 <Text strong style={{ fontSize: 12 }}>gpt-5.4</Text>（最新旗舰）、
-                <Text style={{ fontSize: 12 }}>gpt-5.2</Text>（高性价比）
-              </span>
-            }
-          >
-            <Input placeholder="gpt-5.4" />
-          </Form.Item>
-          <Form.Item style={{ marginBottom: 0 }}>
+      <OptionsPageLayout
+        eyebrow="Core Setup"
+        title="模型与连接配置"
+        description="将 Options 页面升级成更像后台控制台的做法，最佳实践不是硬抄截图，而是抽出统一页面壳、分组卡片和概览指标，让后续所有设置页都能复用。"
+        extra={
+          <Space>
+            <Button onClick={() => form.resetFields()}>重置表单</Button>
             <Button type="primary" loading={saving} onClick={() => void handleSave()}>
               保存设置
             </Button>
-          </Form.Item>
-        </Form>
-      </Card>
+          </Space>
+        }
+        metrics={[
+          {
+            label: '连接状态',
+            value: configured ? '已连接' : '待配置',
+            hint: configured ? 'API 地址和密钥已写入本地存储' : '完成三项配置后即可启用 AI 助手',
+            accent: configured ? 'green' : 'orange',
+          },
+          {
+            label: '当前模型',
+            value: model || 'gpt-5.4',
+            hint: '推荐旗舰模型作为默认入口',
+            accent: 'blue',
+          },
+          {
+            label: '服务地址',
+            value: endpoint ? '已设置' : '未设置',
+            hint: endpointLabel,
+            accent: 'neutral',
+          },
+        ]}
+      >
+        <OptionsSectionCard
+          title="连接配置"
+          description="Mole 通过 OpenAI 兼容接口与大语言模型通信。配置完成后，即可在任意网页上使用 AI 助手。"
+        >
+          <Form form={form} layout="vertical" className="options-form-panel">
+            <Form.Item
+              label="Endpoint URL"
+              name="endpoint"
+              extra="API 服务地址，如 https://api.openai.com/v1"
+            >
+              <Input placeholder="https://api.openai.com/v1" />
+            </Form.Item>
+            <Form.Item
+              label="API Key"
+              name="apiKey"
+              extra="你的 API 密钥，仅存储在本地浏览器中"
+            >
+              <Input.Password placeholder="sk-..." />
+            </Form.Item>
+            <Form.Item
+              label="Model"
+              name="model"
+              extra={
+                <span>
+                  推荐 <Text strong style={{ fontSize: 12 }}>gpt-5.4</Text>（最新旗舰）、
+                  <Text style={{ fontSize: 12 }}>gpt-5.2</Text>（高性价比）
+                </span>
+              }
+            >
+              <Input placeholder="gpt-5.4" />
+            </Form.Item>
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Button type="primary" loading={saving} onClick={() => void handleSave()}>
+                保存设置
+              </Button>
+            </Form.Item>
+          </Form>
+        </OptionsSectionCard>
+      </OptionsPageLayout>
 
       {/* 首次配置引导浮层 */}
       <Modal
@@ -148,27 +180,20 @@ export function LLMSettingsPage() {
         width={520}
         centered
         styles={{
-          body: { padding: '32px 28px 24px' },
+          body: { padding: '36px 32px 28px' },
         }}
       >
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            background: '#f5f5f7',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 16,
-          }}>
-            <RocketOutlined style={{ fontSize: 26, color: '#1d1d1f' }} />
-          </div>
-          <Title level={4} style={{ marginBottom: 4 }}>欢迎使用 Mole</Title>
-          <Paragraph type="secondary" style={{ fontSize: 14, marginBottom: 0 }}>
+          <img
+            src={chrome.runtime?.getURL?.('logo.png') || '/logo.png'}
+            alt="Mole"
+            style={{ width: 64, height: 64, marginBottom: 12 }}
+          />
+          <Title level={4} style={{ marginBottom: 4, fontWeight: 600 }}>欢迎使用 Mole</Title>
+          <Paragraph type="secondary" style={{ fontSize: 14, marginBottom: 0, lineHeight: 1.6 }}>
             只需三步，即可让 AI 助手在你的浏览器中工作。
             <br />
-            配置完成后，在任意网页按 <Text keyboard>⌘M</Text> 唤起 Mole。
+            配置完成后，在任意网页按 <Text keyboard>⌘ M</Text> 唤起 Mole。
           </Paragraph>
         </div>
 
@@ -200,40 +225,13 @@ export function LLMSettingsPage() {
             <Input placeholder="gpt-5.4" />
           </Form.Item>
 
-          {/* 推荐模型提示 */}
-          <div style={{
-            background: '#f5f5f7',
-            borderRadius: 10,
-            padding: '12px 16px',
-            marginBottom: 24,
-          }}>
-            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
-              推荐模型
-            </Text>
-            {RECOMMENDED_MODELS.map((m) => (
-              <div
-                key={m.name}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '4px 0',
-                  fontSize: 13,
-                }}
-              >
-                <Text strong style={{ fontFamily: 'monospace', fontSize: 12 }}>{m.name}</Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>{m.desc}</Text>
-              </div>
-            ))}
-          </div>
-
           <Button
             type="primary"
             block
             loading={saving}
             icon={<CheckCircleOutlined />}
             onClick={() => void handleSetupSave()}
-            style={{ height: 42, fontWeight: 500 }}
+            style={{ height: 40, fontWeight: 500, borderRadius: 8 }}
           >
             开始使用 Mole
           </Button>

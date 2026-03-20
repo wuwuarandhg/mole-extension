@@ -52,7 +52,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ### 构建输出
 
-所有构建输出到：`build_version/mole_extension_${version}/`
+所有构建输出到：`build_version/mole-extension/`
 
 输出目录结构符合 Chrome 扩展 manifest 要求：
 - `index.html` + assets - 弹窗 UI
@@ -258,7 +258,7 @@ interface FunctionResult { success, data?, error? }
 
 1. 在 `src/` 目录下修改代码
 2. 运行 `npm run build` 或 `npm run dev`（监听模式）
-3. 在 Chrome 中从 `build_version/mole_extension_${version}/` 加载未打包的扩展
+3. 在 Chrome 中从 `build_version/mole-extension/` 加载未打包的扩展
 4. 内容脚本修改：重新加载扩展并刷新目标页面
 5. 后台脚本修改：重新加载扩展
 6. 弹窗修改：关闭并重新打开弹窗

@@ -14,9 +14,9 @@ import { matchSkills } from './skill-matcher';
 
 // ============ 常量 ============
 
-const DOMAIN_STORAGE_KEY = 'mole_skills_v2';
-const SOURCES_KEY = 'mole_skill_sources_v2';
-const MIGRATION_FLAG_KEY = 'mole_skill_migrated_v1';
+const DOMAIN_STORAGE_KEY = 'mole_skills';
+const SOURCES_KEY = 'mole_skill_sources';
+const MIGRATION_FLAG_KEY = 'mole_skill_migrated';
 const SYNC_ALARM_NAME = 'mole_skill_sync';
 const SYNC_INTERVAL_HOURS = 6;
 

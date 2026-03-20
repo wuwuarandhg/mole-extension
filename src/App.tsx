@@ -2,8 +2,7 @@
  * Popup App — 状态面板
  */
 
-import type React from 'react';
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { VERSION } from './config';
 
 /** LLM 配置状态 */
@@ -38,163 +37,149 @@ const getWorkflowCount = (): Promise<number> =>
     });
   });
 
+/** 从 endpoint 提取更短的展示文本 */
+const formatEndpointLabel = (endpoint?: string): string => {
+  if (!endpoint) return '尚未设置 API 地址';
+  try {
+    const url = new URL(endpoint);
+    return `${url.host}${url.pathname === '/' ? '' : url.pathname}`;
+  } catch {
+    return endpoint;
+  }
+};
+
 function App() {
   const [llmStatus, setLLMStatus] = useState<LLMStatus | null>(null);
   const [workflowCount, setWorkflowCount] = useState<number | null>(null);
 
-  useEffect(() => {
-    void getLLMStatus().then(setLLMStatus);
-    void getWorkflowCount().then(setWorkflowCount);
+  const loadOverview = useCallback(async () => {
+    const [nextLLMStatus, nextWorkflowCount] = await Promise.all([
+      getLLMStatus(),
+      getWorkflowCount(),
+    ]);
+    setLLMStatus(nextLLMStatus);
+    setWorkflowCount(nextWorkflowCount);
   }, []);
 
+  useEffect(() => {
+    void loadOverview();
+  }, [loadOverview]);
+
+  useEffect(() => {
+    const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+      if (areaName !== 'local') return;
+      if (changes.mole_ai_settings || changes.mole_site_workflows_v1) {
+        void loadOverview();
+      }
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => chrome.storage.onChanged.removeListener(handleStorageChange);
+  }, [loadOverview]);
+
   /** 打开 Options 页面 */
-  const openOptions = () => {
-    chrome.runtime.openOptionsPage();
+  const openOptions = (hash?: string) => {
+    const optionsUrl = chrome.runtime.getURL(`options.html${hash ? `#/${hash}` : ''}`);
+    void chrome.tabs.create({ url: optionsUrl });
+    window.close();
   };
 
+  const llmReady = !!llmStatus?.configured;
+  const endpointLabel = useMemo(() => formatEndpointLabel(llmStatus?.endpoint), [llmStatus?.endpoint]);
+  const modelLabel = llmStatus?.model || 'gpt-5.4';
+  const workflowValue = workflowCount === null ? '...' : String(workflowCount);
+
   return (
-    <div style={styles.container}>
-      {/* 品牌区 */}
-      <div style={styles.brandArea}>
-        <img src="logo.png" alt="Mole" style={styles.logo} />
-        <div>
-          <h1 style={styles.title}>Mole</h1>
-          <p style={styles.version}>v{VERSION}</p>
+    <div className="popup-shell">
+      <div className="popup-glow popup-glow-left" />
+      <div className="popup-glow popup-glow-right" />
+
+      <div className="popup-card">
+        <div className="popup-topbar">
+          <div className="popup-topbar-badge">
+            <span className="popup-topbar-dot" />
+            Extension Console
+          </div>
+          <div className="popup-version">v{VERSION}</div>
+        </div>
+
+        <div className="popup-brand">
+          <img src="logo.png" alt="Mole" className="popup-logo" />
+          <div className="popup-brand-copy">
+            <h1 className="popup-title">Mole</h1>
+            <p className="popup-subtitle">AI 助手控制台</p>
+          </div>
+        </div>
+
+        <div className="popup-summary">
+          <div>
+            <div className="popup-summary-eyebrow">Quick Overview</div>
+            <div className="popup-summary-title">核心状态</div>
+            <div className="popup-summary-text">
+              {llmStatus === null ? '正在同步配置…' : llmReady ? '模型与工作流已就绪' : '请先完成模型配置'}
+            </div>
+          </div>
+          <div className={`popup-hero-status${llmReady ? ' is-ready' : ' is-warning'}`}>
+            {llmStatus === null ? '读取中' : llmReady ? '已就绪' : '待配置'}
+          </div>
+        </div>
+
+        <div className="popup-metrics">
+          <div className="popup-metric popup-metric-blue">
+            <div className="popup-metric-label">模型连接</div>
+            <div className="popup-metric-value">{llmStatus === null ? '...' : llmReady ? '正常' : '未配置'}</div>
+            <div className="popup-metric-hint">{endpointLabel}</div>
+          </div>
+          <div className="popup-metric popup-metric-green">
+            <div className="popup-metric-label">默认模型</div>
+            <div className="popup-metric-value">{llmStatus === null ? '...' : modelLabel}</div>
+            <div className="popup-metric-hint">当前默认模型</div>
+          </div>
+          <div className="popup-metric popup-metric-orange">
+            <div className="popup-metric-label">工作流数量</div>
+            <div className="popup-metric-value">{workflowValue}</div>
+            <div className="popup-metric-hint">本地已加载配置</div>
+          </div>
+        </div>
+
+        <div className="popup-section">
+          <div className="popup-section-header">
+            <div className="popup-section-title">状态摘要</div>
+          </div>
+
+          <div className="popup-status-list">
+            <div className="popup-status-item">
+              <div className="popup-status-copy">
+                <div className="popup-status-name">LLM 接口</div>
+                <div className="popup-status-text">
+                  {llmStatus === null ? '正在读取本地配置…' : llmReady ? endpointLabel : '需要先配置 Endpoint 和 API Key'}
+                </div>
+              </div>
+              <div className={`popup-pill${llmReady ? ' is-success' : ' is-danger'}`}>
+                {llmStatus === null ? '读取中' : llmReady ? '已配置' : '未配置'}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div className="popup-actions">
+          <button type="button" className="popup-btn popup-btn-primary" onClick={() => openOptions()}>
+            打开控制台
+          </button>
+        </div>
+
+        <div className="popup-links">
+          <button type="button" className="popup-link-btn" onClick={() => openOptions('settings')}>
+            模型设置
+          </button>
+          <button type="button" className="popup-link-btn" onClick={() => openOptions('workflows')}>
+            工作流
+          </button>
         </div>
       </div>
-
-      {/* 状态卡片 */}
-      <div style={styles.statusArea}>
-        {/* LLM 状态 */}
-        <div style={styles.statusCard}>
-          <div style={styles.statusRow}>
-            <span style={styles.statusLabel}>LLM</span>
-            <span style={{
-              ...styles.statusBadge,
-              backgroundColor: llmStatus?.configured ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-              color: llmStatus?.configured ? '#22c55e' : '#ef4444',
-            }}>
-              {llmStatus === null ? '...' : llmStatus.configured ? '已配置' : '未配置'}
-            </span>
-          </div>
-          {llmStatus?.configured ? (
-            <>
-              <p style={styles.statusDetail}>{llmStatus.endpoint}</p>
-              <p style={styles.statusDetail}>{llmStatus.model || '未指定模型'}</p>
-            </>
-          ) : (
-            <p style={styles.statusDetail}>请在 Options 页面配置 API</p>
-          )}
-        </div>
-
-        {/* Workflow 状态 */}
-        <div style={styles.statusCard}>
-          <div style={styles.statusRow}>
-            <span style={styles.statusLabel}>Workflows</span>
-            <span style={styles.statusCount}>
-              {workflowCount === null ? '...' : workflowCount}
-            </span>
-          </div>
-          <p style={styles.statusDetail}>已加载工作流</p>
-        </div>
-      </div>
-
-      {/* 操作区 */}
-      <button type="button" style={styles.optionsBtn} onClick={openOptions}>
-        打开设置
-      </button>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    width: '320px',
-    minHeight: '280px',
-    display: 'flex',
-    flexDirection: 'column',
-    backgroundColor: '#050507',
-    color: '#e5e7eb',
-    fontFamily: "'JetBrains Mono', 'Menlo', monospace",
-    padding: '20px',
-    boxSizing: 'border-box',
-  },
-  brandArea: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '20px',
-  },
-  logo: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '10px',
-  },
-  title: {
-    fontSize: '18px',
-    fontWeight: 700,
-    margin: 0,
-    color: '#f9fafb',
-  },
-  version: {
-    fontSize: '11px',
-    color: '#6b7280',
-    margin: '2px 0 0 0',
-  },
-  statusArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    flex: 1,
-  },
-  statusCard: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: '8px',
-    padding: '12px',
-    border: '1px solid rgba(255,255,255,0.06)',
-  },
-  statusRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '6px',
-  },
-  statusLabel: {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#d1d5db',
-  },
-  statusBadge: {
-    fontSize: '10px',
-    fontWeight: 600,
-    padding: '2px 8px',
-    borderRadius: '999px',
-  },
-  statusCount: {
-    fontSize: '14px',
-    fontWeight: 700,
-    color: '#3b82f6',
-  },
-  statusDetail: {
-    fontSize: '11px',
-    color: '#6b7280',
-    margin: '2px 0 0 0',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap' as const,
-  },
-  optionsBtn: {
-    marginTop: '16px',
-    padding: '10px',
-    borderRadius: '8px',
-    border: '1px solid rgba(59,130,246,0.3)',
-    backgroundColor: 'rgba(59,130,246,0.1)',
-    color: '#60a5fa',
-    fontSize: '12px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontFamily: "'JetBrains Mono', monospace",
-  },
-};
 
 export default App;

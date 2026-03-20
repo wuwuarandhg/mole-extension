@@ -23,14 +23,14 @@ npm install
 npm run build
 ```
 
-Build output goes to the `build_version/mole-extension_1.0.0/` directory.
+Build output goes to the `build_version/mole-extension/` directory.
 
 ### 4. Load into Chrome
 
 1. Open Chrome and navigate to `chrome://extensions/`
 2. Enable **Developer mode** in the top right corner
 3. Click **Load unpacked**
-4. Select the `build_version/mole-extension_1.0.0/` directory
+4. Select the `build_version/mole-extension/` directory
 5. The extension is installed — the icon appears in the browser toolbar
 
 ## First Use

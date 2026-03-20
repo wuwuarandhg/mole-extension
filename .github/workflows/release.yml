@@ -26,8 +26,7 @@ jobs:
       - name: Package extension
         run: |
           cd build_version
-          DIR=$(ls -d mole-extension_* | head -1)
-          zip -r "../mole-extension-${{ github.ref_name }}.zip" "$DIR"
+          zip -r "../mole-extension-${{ github.ref_name }}.zip" "mole-extension"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
