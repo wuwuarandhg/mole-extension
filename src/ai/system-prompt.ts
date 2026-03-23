@@ -90,18 +90,20 @@ export const buildSystemPrompt = (
 ### 第三类：多步任务
 触发条件：需要 2 步以上才能完成的目标
 做法：
-1. 执行第一步
-2. 根据结果决定下一步
-3. 重复直到完成
-4. 给出最终结果
+1. 先用 todo(action='create') 列出主要步骤（3-8 步为宜，不需要面面俱到）
+2. 每开始一步前用 todo(action='update', status='in_progress') 标记
+3. 完成一步后用 todo(action='update', status='completed') 标记，可附 result 简述成果
+4. 执行中发现新步骤，用 todo(action='add') 追加
+5. 全部完成后给出最终结果
 
-关键：每一步都根据上一步的实际结果来决定下一步，不要在开头就把所有步骤都规划好${hasSubtask ? `
+关键：计划可以随执行调整。每一步都根据实际结果决定下一步，但通过 todo 保持进度可见${hasSubtask ? `
 
 ### 第四类：复合任务
 触发条件：包含多个相对独立的子目标（例如"在 A 网站查 X，在 B 网站查 Y，然后对比"）
 做法：使用 spawn_subtask 工具将每个独立子目标分开执行，然后汇总结果
 为什么要拆分：每个子任务有独立的上下文，不会互相干扰，避免信息混杂导致偏离
-注意：不要用 spawn_subtask 处理简单的单步操作` : ''}
+注意：不要用 spawn_subtask 处理简单的单步操作
+建议：在使用 spawn_subtask 之前，先用 todo 工具将各子目标列出来，方便跟踪整体进度` : ''}
 
 ## 数据提取工作流
 
@@ -149,6 +151,12 @@ export const buildSystemPrompt = (
 - 工具返回 success=false → 读错误信息，换个方法试一次
 - 连续 2 次同样失败 → 别再试了，告诉用户具体哪里不行
 - page_assert 失败 → 用 page_repair 修复一次，如果还不行就换路径
+
+### 任务规划
+- 预估 3 步以上的任务：先用 todo 制定计划再执行
+- 同一时间只做一件事：一个 in_progress，做完再开始下一个
+- 保持合适粒度：最多 20 步，不要拆得太细（"在百度搜索手机壳"是一步，不要拆成"打开百度""点击搜索框""输入关键词"三步）
+- 完成时记录成果：todo(action='update', status='completed', result='找到 10 条结果') 方便后续参考
 
 ## 请求用户确认
 

@@ -50,6 +50,7 @@ export const compactContext = (
   context: InputItem[],
   maxItems: number,
   emit: (event: AIStreamEvent) => void,
+  todoStatusText?: string,
 ): boolean => {
   if (context.length <= maxItems) return false;
 
@@ -90,6 +91,9 @@ export const compactContext = (
   if (firstUserMessage && 'content' in firstUserMessage) {
     const goalText = getTextContent((firstUserMessage as MessageInputItem).content).slice(0, 200);
     summaryParts.push(`原始目标：${goalText}`);
+  }
+  if (todoStatusText) {
+    summaryParts.push(`\n当前任务计划：\n${todoStatusText}`);
   }
 
   const summary: InputItem = {

@@ -34,6 +34,9 @@ import { mcpToolsToSchema } from '../mcp/adapters';
 import { buildSiteWorkflowSchema } from '../functions/site-workflow';
 import { buildSkillContext } from '../functions/skill';
 import type { SkillGuideEntry, SkillCatalogEntry } from '../functions/skill';
+import { TodoManager } from './todo-manager';
+import type { TodoSnapshot } from './todo-manager';
+import { createTodoFunction } from '../functions/todo';
 
 // ============ 类型定义 ============
 
@@ -91,6 +94,8 @@ export interface HandleChatOptions {
   awaitTurnResponse?: (request: PendingTurnResponseRequest, signal?: AbortSignal) => Promise<unknown>;
   /** 抑制下一步建议（向后兼容，新架构不产生此类文案） */
   suppressNextStepHint?: boolean;
+  /** 从断点恢复的 todo 快照 */
+  resumeTodoSnapshot?: TodoSnapshot;
 }
 
 // ============ 默认配置 ============
@@ -248,6 +253,7 @@ const emitCheckpoint = (
   round: number,
   summary: string,
   context: InputItem[],
+  todoSnapshot?: TodoSnapshot,
 ) => {
   if (!options?.onCheckpoint) return;
   options.onCheckpoint({
@@ -256,6 +262,7 @@ const emitCheckpoint = (
     summary,
     contextSnapshot: context,
     updatedAt: Date.now(),
+    meta: todoSnapshot ? { todoSnapshot } : undefined,
   });
 };
 
@@ -274,12 +281,15 @@ const agenticLoop = async (
   emit: (event: AIStreamEvent) => void,
   options?: HandleChatOptions,
   depth: number = 0,
+  todoManager?: TodoManager,
+  todoFn?: ReturnType<typeof createTodoFunction>,
 ): Promise<InputItem[]> => {
   let round = 0;
   let totalToolCalls = 0;
   let emptyRetries = 0;
   let imageInjectionCount = 0;
   const signatureCount = new Map<string, number>();
+  let roundsSinceTodoOp = 0;
 
   emit({ type: 'thinking', content: 'AI 正在思考...' });
   emitCheckpoint(options, 'act', 0, '开始处理', context);
@@ -291,7 +301,8 @@ const agenticLoop = async (
     }
 
     // ── 边界：上下文压缩 ──
-    compactContext(context, budget.maxContextItems, emit);
+    const todoText = todoManager?.active ? todoManager.toStatusText() : undefined;
+    compactContext(context, budget.maxContextItems, emit, todoText);
 
     // ── 机制：注入待处理的用户输入 ──
     await injectPendingInputs(context, options?.consumePendingUserInputs);
@@ -375,13 +386,72 @@ const agenticLoop = async (
           }
         : undefined;
 
-      const results = await executeToolCalls(functionCalls, tabId, signal, emit, subtaskRunner);
-      for (const r of results) context.push(r);
+      // ── 机制：拦截 todo 调用，本地执行 ──
+      const regularCalls: OutputFunctionCallItem[] = [];
+      if (todoManager && todoFn) {
+        for (const fc of functionCalls) {
+          if (fc.name === 'todo') {
+            // 本地执行 todo 工具
+            let todoOutput: string;
+            try {
+              const params = JSON.parse(fc.arguments || '{}');
+              const validationError = todoFn.validate?.(params) ?? null;
+              if (validationError) {
+                todoOutput = JSON.stringify({ success: false, error: validationError });
+              } else {
+                const result = await todoFn.execute(params);
+                todoOutput = JSON.stringify(result);
+              }
+            } catch (err: any) {
+              todoOutput = JSON.stringify({ success: false, error: err?.message || 'todo 执行异常' });
+            }
 
-      // 注入截图图片到上下文（视觉理解）
-      imageInjectionCount = await injectScreenshotImages(functionCalls, results, context, imageInjectionCount);
+            context.push({ type: 'function_call_output' as const, call_id: fc.call_id, output: todoOutput });
+            roundsSinceTodoOp = 0;
 
-      emitCheckpoint(options, 'act', round, `工具执行完毕（共 ${totalToolCalls} 次调用）`, context);
+            // emit 事件（UI 展示）
+            emit({ type: 'function_call', content: JSON.stringify({ name: 'todo', callId: fc.call_id, arguments: fc.arguments }) });
+            emit({ type: 'function_result', content: JSON.stringify({ name: 'todo', callId: fc.call_id, success: !todoOutput.includes('"success":false'), message: '', cancelled: false }) });
+          } else {
+            regularCalls.push(fc);
+          }
+        }
+      } else {
+        regularCalls.push(...functionCalls);
+      }
+
+      // 执行剩余常规工具
+      if (regularCalls.length > 0) {
+        const results = await executeToolCalls(regularCalls, tabId, signal, emit, subtaskRunner);
+        for (const r of results) context.push(r);
+
+        // 注入截图图片到上下文（视觉理解）
+        imageInjectionCount = await injectScreenshotImages(regularCalls, results, context, imageInjectionCount);
+      }
+
+      // ── 机制：Todo 进度提醒 ──
+      if (todoManager) {
+        roundsSinceTodoOp++;
+        if (todoManager.active) {
+          const reminderInterval = todoManager.current ? 4 : 2;
+          if (roundsSinceTodoOp >= reminderInterval) {
+            context.push({
+              role: 'user' as const,
+              content: `<todo-reminder>\n${todoManager.toStatusText()}\n</todo-reminder>`,
+            });
+            roundsSinceTodoOp = 0;
+          }
+        } else if (round >= 6 && roundsSinceTodoOp >= 6) {
+          context.push({
+            role: 'user' as const,
+            content: '<todo-reminder>当前任务已执行多步，建议用 todo(action=\'create\') 制定剩余计划。</todo-reminder>',
+          });
+          roundsSinceTodoOp = 0;
+        }
+      }
+
+      const todoSnap = todoManager?.active ? todoManager.toSnapshot() : undefined;
+      emitCheckpoint(options, 'act', round, `工具执行完毕（共 ${totalToolCalls} 次调用）`, context, todoSnap);
       continue;
     }
 
@@ -411,7 +481,7 @@ const agenticLoop = async (
     }
 
     // 模型给出了非空文本回复 → 循环自然结束
-    emitCheckpoint(options, 'finalize', round, '任务完成', context);
+    emitCheckpoint(options, 'finalize', round, '任务完成', context, todoManager?.active ? todoManager.toSnapshot() : undefined);
     break;
   }
 
@@ -430,7 +500,7 @@ const agenticLoop = async (
         for (const item of finalResponse.outputItems) context.push(item as InputItem);
       } catch { /* 忽略 */ }
     }
-    emitCheckpoint(options, 'finalize', round, '达到轮数上限', context);
+    emitCheckpoint(options, 'finalize', round, '达到轮数上限', context, todoManager?.active ? todoManager.toSnapshot() : undefined);
   }
 
   return context;
@@ -508,6 +578,18 @@ export const handleChat = async (
   // 注入 spawn_subtask（只有顶层才有）
   tools.push(SPAWN_SUBTASK_SCHEMA);
 
+  // ── 任务规划追踪 ──
+  const todoManager = options?.resumeTodoSnapshot
+    ? TodoManager.fromSnapshot(options.resumeTodoSnapshot)
+    : new TodoManager();
+  const todoFn = createTodoFunction(() => todoManager);
+  tools.push({
+    type: 'function' as const,
+    name: todoFn.name,
+    description: todoFn.description,
+    parameters: todoFn.parameters,
+  });
+
   // 构建系统提示词（域级 guide 直接注入，全局只放目录）
   const systemPrompt = buildSystemPrompt(tools, true, domainGuides, globalCatalog);
 
@@ -519,5 +601,5 @@ export const handleChat = async (
   }
 
   // 执行循环
-  return agenticLoop(context, tools, systemPrompt, budget, tabId, signal, onEvent, options, 0);
+  return agenticLoop(context, tools, systemPrompt, budget, tabId, signal, onEvent, options, 0, todoManager, todoFn);
 };
