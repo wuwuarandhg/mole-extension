@@ -11,6 +11,9 @@ import { requestConfirmationFunction } from '../functions/request-confirmation';
 /** 子任务执行器类型（由 orchestrator 注入，实现递归） */
 export type SubtaskRunner = (goal: string, signal?: AbortSignal) => Promise<InputItem[]>;
 
+/** 探索子 agent 执行器类型（由 orchestrator 注入） */
+export type ExploreRunner = (goal: string, signal?: AbortSignal) => Promise<InputItem[]>;
+
 /** spawn_subtask 工具 Schema */
 export const SPAWN_SUBTASK_SCHEMA: ToolSchema = {
   type: 'function',
@@ -22,6 +25,23 @@ export const SPAWN_SUBTASK_SCHEMA: ToolSchema = {
       goal: {
         type: 'string',
         description: '子任务的目标描述，要具体明确，包含必要的上下文信息',
+      },
+    },
+    required: ['goal'],
+  },
+};
+
+/** explore 探索工具 Schema */
+export const EXPLORE_SCHEMA: ToolSchema = {
+  type: 'function',
+  name: 'explore',
+  description: '启动探索子 agent 侦察页面结构和交互元素。探索 agent 在独立上下文中运行，只做观察不做写入操作，返回页面分析摘要和建议执行步骤。适合：首次访问陌生页面、需要了解页面结构再制定计划、复杂表单/流程的前期侦察。',
+  parameters: {
+    type: 'object',
+    properties: {
+      goal: {
+        type: 'string',
+        description: '探索目标描述，说明你想了解什么（如"了解这个表单有哪些字段和提交按钮"、"查看搜索结果的结构和翻页方式"）',
       },
     },
     required: ['goal'],
@@ -50,8 +70,8 @@ const buildExecutionGroups = async (calls: OutputFunctionCallItem[]): Promise<Ex
   };
 
   for (const call of calls) {
-    // spawn_subtask 始终串行
-    if (call.name === 'spawn_subtask') {
+    // spawn_subtask / explore 始终串行
+    if (call.name === 'spawn_subtask' || call.name === 'explore') {
       flushParallelGroup();
       groups.push({ type: 'serial', calls: [call] });
       continue;
@@ -88,6 +108,7 @@ export const executeToolCalls = async (
   signal: AbortSignal | undefined,
   emit: (event: AIStreamEvent) => void,
   runSubtask?: SubtaskRunner,
+  runExplore?: ExploreRunner,
 ): Promise<InputItem[]> => {
   const results: InputItem[] = [];
 
@@ -180,6 +201,24 @@ export const executeToolCalls = async (
         output = JSON.stringify({
           success: false,
           error: err?.message || '子任务执行失败',
+        });
+      }
+    } else if (call.name === 'explore' && runExplore) {
+      // 探索子 agent
+      const goal = String(params.goal || '');
+      emit({ type: 'thinking', content: `正在探索：${goal.slice(0, 60)}` });
+
+      try {
+        const exploreContext = await runExplore(goal, signal);
+        const lastReply = extractLastAssistantReply(exploreContext);
+        output = JSON.stringify({
+          success: true,
+          data: { summary: lastReply || '探索已完成但无明确输出' },
+        });
+      } catch (err: any) {
+        output = JSON.stringify({
+          success: false,
+          error: err?.message || '探索执行失败',
         });
       }
     } else {

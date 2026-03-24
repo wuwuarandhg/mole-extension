@@ -90,6 +90,9 @@ export const LOGO_ASK_USER = `data:image/svg+xml;charset=utf-8,${encodeURICompon
 // 任务规划（清单勾选，青色）
 const LOGO_TODO = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>')}`;
 
+// 探索侦察（望远镜，琥珀色）
+const LOGO_EXPLORE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 8a3 3 0 0 0-3 3"/><circle cx="11" cy="11" r="2" fill="none" stroke="#d97706" stroke-width="1.5"/></svg>')}`;
+
 // 函数图标映射（函数名 → logo）
 export const FUNCTION_ICONS: Record<string, string> = {
   page_viewer: LOGO_PAGE_VIEWER,
@@ -123,6 +126,7 @@ export const FUNCTION_ICONS: Record<string, string> = {
   ask_user: LOGO_ASK_USER,
   save_workflow: LOGO_SAVE_WORKFLOW,
   todo: LOGO_TODO,
+  explore: LOGO_EXPLORE,
 };
 
 // 函数中文名映射（用户可见，不暴露英文标识）
@@ -158,4 +162,5 @@ export const FUNCTION_LABELS: Record<string, string> = {
   ask_user: '向用户提问',
   save_workflow: '保存工作流',
   todo: '任务规划',
+  explore: '探索',
 };

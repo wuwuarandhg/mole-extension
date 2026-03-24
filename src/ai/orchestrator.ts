@@ -27,8 +27,8 @@ import type {
 import { ArtifactStore } from '../lib/artifact-store';
 import { chatStream } from './llm-client';
 import { compactContext, getTextContent } from './context-manager';
-import { executeToolCalls, SPAWN_SUBTASK_SCHEMA, resetSensitiveAccessTrust } from './tool-executor';
-import { buildSystemPrompt, buildSubtaskPrompt } from './system-prompt';
+import { executeToolCalls, SPAWN_SUBTASK_SCHEMA, EXPLORE_SCHEMA, resetSensitiveAccessTrust } from './tool-executor';
+import { buildSystemPrompt, buildSubtaskPrompt, buildExplorePrompt } from './system-prompt';
 import { ensureToolRegistryReady, mcpClient } from '../functions/registry';
 import { mcpToolsToSchema } from '../mcp/adapters';
 import { buildSiteWorkflowSchema } from '../functions/site-workflow';
@@ -112,6 +112,19 @@ const MAX_EMPTY_RETRIES = 2;
 
 /** 每次任务最多注入的截图图片数量（防止上下文膨胀） */
 const MAX_IMAGE_INJECTIONS = 3;
+
+/** explore 探索子 agent 允许使用的只读工具白名单 */
+const EXPLORE_ALLOWED_TOOLS: ReadonlySet<string> = new Set([
+  'page_skeleton',
+  'page_snapshot',
+  'page_viewer',
+  'screenshot',
+  'tab_navigate',
+  'extract_data',
+  'fetch_url',
+  'selection_context',
+  'skill',
+]);
 
 // ============ 辅助函数 ============
 
@@ -386,6 +399,23 @@ const agenticLoop = async (
           }
         : undefined;
 
+      // ── 机制：探索子 agent ──
+      const exploreRunner = (goal: string, exploreSignal?: AbortSignal) => {
+        const exploreContext: InputItem[] = [{ role: 'user' as const, content: goal }];
+        // 过滤工具：只保留只读白名单中的工具
+        const exploreTools = tools.filter(t => EXPLORE_ALLOWED_TOOLS.has(t.name));
+        const exploreBudget: LoopBudget = {
+          ...budget,
+          maxRounds: 15,
+          maxToolCalls: 30,
+          maxSubtaskDepth: 0, // 不允许递归
+        };
+        return agenticLoop(
+          exploreContext, exploreTools, buildExplorePrompt(), exploreBudget,
+          tabId, exploreSignal || signal, emit, undefined, depth + 1,
+        );
+      };
+
       // ── 机制：拦截 todo 调用，本地执行 ──
       const regularCalls: OutputFunctionCallItem[] = [];
       if (todoManager && todoFn) {
@@ -427,7 +457,7 @@ const agenticLoop = async (
 
       // 执行剩余常规工具
       if (regularCalls.length > 0) {
-        const results = await executeToolCalls(regularCalls, tabId, signal, emit, subtaskRunner);
+        const results = await executeToolCalls(regularCalls, tabId, signal, emit, subtaskRunner, exploreRunner);
         for (const r of results) context.push(r);
 
         // 注入截图图片到上下文（视觉理解）
@@ -582,6 +612,9 @@ export const handleChat = async (
 
   // 注入 spawn_subtask（只有顶层才有）
   tools.push(SPAWN_SUBTASK_SCHEMA);
+
+  // 注入 explore 探索工具（只有顶层才有）
+  tools.push(EXPLORE_SCHEMA);
 
   // ── 任务规划追踪 ──
   const todoManager = options?.resumeTodoSnapshot
