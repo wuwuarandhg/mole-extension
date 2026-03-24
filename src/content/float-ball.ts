@@ -1911,11 +1911,11 @@ export const initFloatBall = async () => {
       group.className = 'mole-calls-group mole-agent-state-ops';
       group.innerHTML = `
         <div class="mole-calls-summary">
-          <span class="arrow">▶</span>
+          <span class="arrow open">▶</span>
           <span class="mole-calls-icons"></span>
           <span class="calls-text">查看执行过程</span>
         </div>
-        <div class="mole-calls-detail"></div>
+        <div class="mole-calls-detail open"></div>
       `;
       if (anchor) {
         anchor.appendChild(group);
