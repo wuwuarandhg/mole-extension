@@ -93,6 +93,9 @@ const LOGO_TODO = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg x
 // 探索侦察（望远镜，琥珀色）
 const LOGO_EXPLORE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 8a3 3 0 0 0-3 3"/><circle cx="11" cy="11" r="2" fill="none" stroke="#d97706" stroke-width="1.5"/></svg>')}`;
 
+// 上下文压缩（折叠/压缩图标，石板灰色）
+const LOGO_COMPACT = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>')}`;
+
 // 函数图标映射（函数名 → logo）
 export const FUNCTION_ICONS: Record<string, string> = {
   page_viewer: LOGO_PAGE_VIEWER,
@@ -127,6 +130,7 @@ export const FUNCTION_ICONS: Record<string, string> = {
   save_workflow: LOGO_SAVE_WORKFLOW,
   todo: LOGO_TODO,
   explore: LOGO_EXPLORE,
+  compact: LOGO_COMPACT,
 };
 
 // 函数中文名映射（用户可见，不暴露英文标识）
@@ -163,4 +167,5 @@ export const FUNCTION_LABELS: Record<string, string> = {
   save_workflow: '保存工作流',
   todo: '任务规划',
   explore: '探索',
+  compact: '压缩',
 };

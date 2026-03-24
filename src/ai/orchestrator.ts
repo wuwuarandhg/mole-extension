@@ -23,10 +23,11 @@
 import type {
   InputItem, OutputItem, OutputFunctionCallItem,
   ToolSchema, AIStreamEvent, ContentPart,
+  MessageInputItem, FunctionCallInputItem, FunctionCallOutputItem,
 } from './types';
 import { ArtifactStore } from '../lib/artifact-store';
-import { chatStream } from './llm-client';
-import { compactContext, getTextContent } from './context-manager';
+import { chatStream, chatComplete } from './llm-client';
+import { compactContext, getTextContent, microCompact, estimateContextTokens, stripImagesFromContent } from './context-manager';
 import { executeToolCalls, SPAWN_SUBTASK_SCHEMA, EXPLORE_SCHEMA, resetSensitiveAccessTrust } from './tool-executor';
 import { buildSystemPrompt, buildSubtaskPrompt, buildExplorePrompt } from './system-prompt';
 import { ensureToolRegistryReady, mcpClient } from '../functions/registry';
@@ -112,6 +113,35 @@ const MAX_EMPTY_RETRIES = 2;
 
 /** 每次任务最多注入的截图图片数量（防止上下文膨胀） */
 const MAX_IMAGE_INJECTIONS = 3;
+
+/** auto_compact 触发阈值（估算 token 数） */
+const AUTO_COMPACT_TOKEN_THRESHOLD = 50000;
+
+/** auto_compact 摘要后保留的尾部条目比例 */
+const AUTO_COMPACT_KEEP_TAIL_RATIO = 0.25;
+
+/** compact 工具 Schema（在 orchestrator 层拦截，不注册 MCP） */
+const COMPACT_SCHEMA: ToolSchema = {
+  type: 'function',
+  name: 'compact',
+  description: '压缩当前对话上下文，保留关键信息，释放空间。当你感觉上下文太长、重复信息太多、或需要为后续操作腾出空间时调用。',
+  parameters: {
+    type: 'object',
+    properties: {},
+    required: [],
+  },
+};
+
+/** auto_compact 摘要系统提示词 */
+const AUTO_COMPACT_SUMMARY_INSTRUCTION = `请总结以下 AI 助手的工作进展，用紧凑的结构化格式输出：
+
+1. 用户原始请求
+2. 已完成的主要步骤和关键发现
+3. 当前任务进度
+4. 需要记住的关键数据（element_id、tab_id、URL、表单字段等）
+5. 尚未完成的待办事项
+
+只输出摘要，不要解释。中文。`;
 
 /** explore 探索子 agent 允许使用的只读工具白名单 */
 const EXPLORE_ALLOWED_TOOLS: ReadonlySet<string> = new Set([
@@ -279,6 +309,133 @@ const emitCheckpoint = (
   });
 };
 
+/**
+ * 将上下文转为可读文本（供 auto_compact LLM 摘要使用）
+ */
+const contextToReadableText = (context: InputItem[]): string => {
+  const parts: string[] = [];
+  for (const item of context) {
+    if ('role' in item && 'content' in item) {
+      const msg = item as MessageInputItem;
+      const text = getTextContent(msg.content);
+      if (text.trim()) {
+        parts.push(`[${msg.role}] ${text}`);
+      }
+    } else if ('type' in item && item.type === 'function_call') {
+      const fc = item as FunctionCallInputItem;
+      parts.push(`[tool_call] ${fc.name}(${fc.arguments})`);
+    } else if ('type' in item && item.type === 'function_call_output') {
+      const fco = item as FunctionCallOutputItem;
+      // 截断过长的工具输出避免摘要 prompt 自身过长
+      const output = fco.output.length > 500 ? fco.output.slice(0, 500) + '...' : fco.output;
+      parts.push(`[tool_result] ${output}`);
+    }
+  }
+  return parts.join('\n');
+};
+
+/**
+ * 执行 auto_compact（LLM 智能摘要压缩）
+ *
+ * 策略：
+ * 1. 将当前 context 转为可读文本
+ * 2. 用 chatComplete 调用 LLM 生成摘要
+ * 3. 替换上下文为：首条用户消息 + LLM 摘要 + 最近 25% 条目
+ * 4. 图片降级为文字
+ *
+ * @returns 摘要文本（成功时），null（失败时降级到 compactContext）
+ */
+const performAutoCompact = async (
+  context: InputItem[],
+  emit: (event: AIStreamEvent) => void,
+  signal: AbortSignal | undefined,
+  todoStatusText?: string,
+): Promise<{ summary: string; before: number; after: number } | null> => {
+  const beforeSize = context.length;
+
+  try {
+    // 将上下文转为可读文本
+    const readableText = contextToReadableText(context);
+
+    // 用 chatComplete 生成摘要
+    const summaryInput: InputItem[] = [
+      { role: 'user' as const, content: readableText },
+    ];
+    const result = await chatComplete(summaryInput, undefined, AUTO_COMPACT_SUMMARY_INSTRUCTION, signal);
+
+    // 从 LLM 输出中提取摘要文本
+    let summaryText = '';
+    for (const outputItem of result.output) {
+      if (outputItem.type === 'message' && Array.isArray(outputItem.content)) {
+        for (const c of outputItem.content) {
+          if (c.type === 'output_text' && c.text) {
+            summaryText += c.text;
+          }
+        }
+      }
+    }
+
+    if (!summaryText.trim()) {
+      return null; // 摘要为空，降级
+    }
+
+    // 找到第一条用户消息
+    const firstUserIndex = context.findIndex(
+      item => 'role' in item && item.role === 'user',
+    );
+    const firstUserMessage = firstUserIndex >= 0 ? context[firstUserIndex] : null;
+
+    // 计算保留的尾部条目数
+    const keepTail = Math.max(Math.floor(context.length * AUTO_COMPACT_KEEP_TAIL_RATIO), 1);
+    const tail = context.slice(context.length - keepTail);
+
+    // 图片降级
+    if (firstUserMessage && 'content' in firstUserMessage && Array.isArray((firstUserMessage as MessageInputItem).content)) {
+      (firstUserMessage as MessageInputItem).content = stripImagesFromContent(
+        (firstUserMessage as MessageInputItem).content,
+      );
+    }
+    for (const item of tail) {
+      if ('role' in item && 'content' in item) {
+        const msg = item as MessageInputItem;
+        if (Array.isArray(msg.content)) {
+          msg.content = stripImagesFromContent(msg.content);
+        }
+      }
+    }
+
+    // 构建摘要条目（附带 todo 状态）
+    let fullSummary = `[context-compacted]\n${summaryText}`;
+    if (todoStatusText) {
+      fullSummary += `\n\n当前任务计划：\n${todoStatusText}`;
+    }
+
+    const summaryItem: InputItem = {
+      role: 'assistant' as const,
+      content: fullSummary,
+    };
+
+    // 替换上下文
+    context.splice(0, context.length);
+    if (firstUserMessage) {
+      context.push(firstUserMessage);
+    }
+    context.push(summaryItem, ...tail);
+
+    const afterSize = context.length;
+
+    emit({
+      type: 'context_compacted',
+      content: JSON.stringify({ before: beforeSize, after: afterSize, method: 'auto_compact' }),
+    });
+
+    return { summary: summaryText, before: beforeSize, after: afterSize };
+  } catch {
+    // LLM 摘要调用失败，返回 null 让调用方降级
+    return null;
+  }
+};
+
 // ============ 核心循环 ============
 
 /**
@@ -313,9 +470,31 @@ const agenticLoop = async (
       return context;
     }
 
-    // ── 边界：上下文压缩 ──
-    const todoText = todoManager?.active ? todoManager.toStatusText() : undefined;
-    compactContext(context, budget.maxContextItems, emit, todoText);
+    // ── 边界：三层上下文压缩 ──
+
+    // Layer 1: micro_compact — 每轮静默清理旧工具结果
+    const microCompacted = microCompact(context);
+    if (microCompacted > 0) {
+      emit({
+        type: 'context_compacted',
+        content: JSON.stringify({ method: 'micro_compact', compressed: microCompacted }),
+      });
+    }
+
+    // Layer 2: auto_compact — token 阈值触发 LLM 智能摘要
+    const estimatedTokens = estimateContextTokens(context);
+    if (estimatedTokens > AUTO_COMPACT_TOKEN_THRESHOLD) {
+      const todoText = todoManager?.active ? todoManager.toStatusText() : undefined;
+      const autoResult = await performAutoCompact(context, emit, signal, todoText);
+      if (!autoResult) {
+        // LLM 摘要失败，降级到现有 compactContext 兜底
+        compactContext(context, budget.maxContextItems, emit, todoText);
+      }
+    } else {
+      // token 未超阈值，仍保留原有 compactContext 作为条目数兜底
+      const todoText = todoManager?.active ? todoManager.toStatusText() : undefined;
+      compactContext(context, budget.maxContextItems, emit, todoText);
+    }
 
     // ── 机制：注入待处理的用户输入 ──
     await injectPendingInputs(context, options?.consumePendingUserInputs);
@@ -416,7 +595,7 @@ const agenticLoop = async (
         );
       };
 
-      // ── 机制：拦截 todo 调用，本地执行 ──
+      // ── 机制：拦截 todo / compact 调用，本地执行 ──
       const regularCalls: OutputFunctionCallItem[] = [];
       if (todoManager && todoFn) {
         for (const fc of functionCalls) {
@@ -447,12 +626,81 @@ const agenticLoop = async (
             if (todoManager.active) {
               emit({ type: 'todo_update', content: JSON.stringify({ items: todoManager.all, stats: todoManager.stats }) });
             }
+          } else if (fc.name === 'compact') {
+            // Layer 3: compact 工具 — 模型主动触发压缩
+            emit({ type: 'function_call', content: JSON.stringify({ name: 'compact', callId: fc.call_id, arguments: fc.arguments }) });
+
+            const beforeSize = context.length;
+            const compactTodoText = todoManager?.active ? todoManager.toStatusText() : undefined;
+            const compactResult = await performAutoCompact(context, emit, signal, compactTodoText);
+
+            let compactOutput: string;
+            if (compactResult) {
+              compactOutput = JSON.stringify({
+                success: true,
+                data: {
+                  before: compactResult.before,
+                  after: compactResult.after,
+                  summary: compactResult.summary.slice(0, 200),
+                },
+              });
+            } else {
+              // LLM 摘要失败，降级到 compactContext
+              const fallbackResult = compactContext(context, Math.floor(context.length * 0.5), emit, compactTodoText);
+              compactOutput = JSON.stringify({
+                success: true,
+                data: {
+                  before: beforeSize,
+                  after: context.length,
+                  summary: fallbackResult ? '已通过规则压缩' : '上下文无需压缩',
+                },
+              });
+            }
+
+            context.push({ type: 'function_call_output' as const, call_id: fc.call_id, output: compactOutput });
+            emit({ type: 'function_result', content: JSON.stringify({ name: 'compact', callId: fc.call_id, success: true, message: '', cancelled: false }) });
           } else {
             regularCalls.push(fc);
           }
         }
       } else {
-        regularCalls.push(...functionCalls);
+        // 无 todoManager 时仍需拦截 compact
+        for (const fc of functionCalls) {
+          if (fc.name === 'compact') {
+            emit({ type: 'function_call', content: JSON.stringify({ name: 'compact', callId: fc.call_id, arguments: fc.arguments }) });
+
+            const beforeSize = context.length;
+            const compactTodoText = todoManager?.active ? todoManager.toStatusText() : undefined;
+            const compactResult = await performAutoCompact(context, emit, signal, compactTodoText);
+
+            let compactOutput: string;
+            if (compactResult) {
+              compactOutput = JSON.stringify({
+                success: true,
+                data: {
+                  before: compactResult.before,
+                  after: compactResult.after,
+                  summary: compactResult.summary.slice(0, 200),
+                },
+              });
+            } else {
+              const fallbackResult = compactContext(context, Math.floor(context.length * 0.5), emit, compactTodoText);
+              compactOutput = JSON.stringify({
+                success: true,
+                data: {
+                  before: beforeSize,
+                  after: context.length,
+                  summary: fallbackResult ? '已通过规则压缩' : '上下文无需压缩',
+                },
+              });
+            }
+
+            context.push({ type: 'function_call_output' as const, call_id: fc.call_id, output: compactOutput });
+            emit({ type: 'function_result', content: JSON.stringify({ name: 'compact', callId: fc.call_id, success: true, message: '', cancelled: false }) });
+          } else {
+            regularCalls.push(fc);
+          }
+        }
       }
 
       // 执行剩余常规工具
@@ -627,6 +875,9 @@ export const handleChat = async (
     description: todoFn.description,
     parameters: todoFn.parameters,
   });
+
+  // 注入 compact 上下文压缩工具
+  tools.push(COMPACT_SCHEMA);
 
   // 构建系统提示词（域级 guide 直接注入，全局只放目录）
   const systemPrompt = buildSystemPrompt(tools, true, domainGuides, globalCatalog);
