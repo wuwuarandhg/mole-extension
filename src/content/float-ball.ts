@@ -153,12 +153,7 @@ export const initFloatBall = async () => {
   bgTaskBadgeEl.className = 'mole-bg-task-badge';
   pill.appendChild(bgTaskBadgeEl);
 
-  pill.appendChild(pillInfoEl);
-  trigger.appendChild(pill);
-  trigger.appendChild(pillNoticeEl);
-  trigger.appendChild(settingsBtn);
-
-  // ---- 关闭按钮 ----
+  // ---- 关闭按钮（角标式，内嵌于 pill）----
   const closeBtn = document.createElement('button');
   closeBtn.className = 'mole-close-btn';
   closeBtn.type = 'button';
@@ -170,7 +165,12 @@ export const initFloatBall = async () => {
       <line x1="6" y1="6" x2="18" y2="18"></line>
     </svg>
   `;
-  trigger.appendChild(closeBtn);
+
+  pill.appendChild(pillInfoEl);
+  pill.appendChild(closeBtn);
+  trigger.appendChild(pill);
+  trigger.appendChild(pillNoticeEl);
+  trigger.appendChild(settingsBtn);
 
   // ---- 关闭菜单 ----
   const currentHostname = window.location.hostname;
@@ -4064,6 +4064,8 @@ export const initFloatBall = async () => {
   });
 
   // ---- 拖拽 ----
+  const TRIGGER_CENTER = (PILL_WIDTH + 10) / 2;
+
   const onMouseDown = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -4074,7 +4076,6 @@ export const initFloatBall = async () => {
     startTriggerY = currentY;
     isDragging = false;
 
-    trigger.classList.add('dragging');
     trigger.classList.remove('snapping');
 
     document.addEventListener('mousemove', onMouseMove, true);
@@ -4091,15 +4092,17 @@ export const initFloatBall = async () => {
     if (!isDragging && Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD) {
       isDragging = true;
       if (isOpen) toggleSearch(false);
+      // 超过阈值后才添加拖拽样式，触发胶囊→圆球变形
+      trigger.classList.add('dragging');
+      trigger.classList.remove('side-left', 'side-right', 'hovering');
     }
 
     if (isDragging) {
-      const newX = startTriggerX + dx;
-      const newY = Math.max(0, Math.min(startTriggerY + dy, window.innerHeight - PILL_HEIGHT));
+      // 圆球居中跟随鼠标：trigger 中心对齐鼠标指针
+      const newX = e.clientX - TRIGGER_CENTER;
+      const newY = e.clientY - (PILL_HEIGHT + 10) / 2;
       trigger.style.left = `${newX}px`;
       trigger.style.top = `${newY}px`;
-      trigger.classList.add('dragging');
-      trigger.classList.remove('side-left', 'side-right');
     }
   };
 
@@ -4113,9 +4116,9 @@ export const initFloatBall = async () => {
     trigger.classList.remove('dragging');
 
     if (isDragging) {
-      const curLeft = trigger.offsetLeft;
-      side = determineSide(curLeft);
-      currentY = clampY(parseInt(trigger.style.top) || currentY);
+      // 用鼠标位置直接判断吸附方向
+      side = e.clientX < getViewportWidth() / 2 ? 'left' : 'right';
+      currentY = clampY(e.clientY - PILL_HEIGHT / 2);
 
       applySideClass();
       trigger.classList.add('snapping');

@@ -58,16 +58,14 @@ export const getStyles = () => `
   .mole-pill {
     position: relative;
     isolation: isolate;
-    overflow: hidden;
+    overflow: visible;
     width: ${PILL_COMPACT_WIDTH}px;
     height: ${PILL_HEIGHT}px;
-    padding: 0 12px 0 9px;
+    padding: 0 12px;
     border-radius: 999px;
-    border: 1px solid var(--ec-border);
-    background: linear-gradient(180deg, rgba(248, 251, 255, 0.96) 0%, var(--ec-surface) 100%);
-    box-shadow: var(--ec-pill-shadow);
-    backdrop-filter: blur(24px) saturate(170%);
-    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    border: none;
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -79,15 +77,14 @@ export const getStyles = () => `
     pointer-events: auto;
     transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1),
                 width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-                box-shadow 0.28s ease,
-                border-color 0.28s ease;
+                box-shadow 0.28s ease;
   }
 
   .mole-pill::before {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(140deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.28) 42%, rgba(255, 255, 255, 0) 72%);
+    background: none;
     pointer-events: none;
     z-index: 0;
   }
@@ -97,9 +94,8 @@ export const getStyles = () => `
     position: absolute;
     inset: -1px;
     border-radius: inherit;
-    background: radial-gradient(circle at 86% 50%, rgba(22, 119, 255, 0.16), rgba(22, 119, 255, 0));
+    background: none;
     opacity: 0;
-    transition: opacity 0.3s ease;
     pointer-events: none;
     z-index: 0;
   }
@@ -111,7 +107,7 @@ export const getStyles = () => `
   .mole-trigger.side-left .mole-pill {
     transform: translateX(-${TUCK_OFFSET}px);
     flex-direction: row-reverse;
-    padding: 0 9px 0 12px;
+    padding: 0 12px;
   }
 
   .mole-trigger.side-left .mole-pill-info {
@@ -138,13 +134,13 @@ export const getStyles = () => `
   .mole-trigger.side-right.hovering:not(.task-running):not(.task-done):not(.task-error):not(.announce) .mole-pill,
   .mole-trigger.side-right.active:not(.task-running):not(.task-done):not(.task-error):not(.announce) .mole-pill {
     transform: translateX(${PILL_WIDTH - PILL_COMPACT_WIDTH}px);
-    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
   }
 
   .mole-trigger.side-left.hovering:not(.task-running):not(.task-done):not(.task-error):not(.announce) .mole-pill,
   .mole-trigger.side-left.active:not(.task-running):not(.task-done):not(.task-error):not(.announce) .mole-pill {
     transform: translateX(-${PILL_WIDTH - PILL_COMPACT_WIDTH}px);
-    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
   }
 
   .mole-trigger.hovering .mole-pill::after,
@@ -153,9 +149,31 @@ export const getStyles = () => `
   }
 
   .mole-trigger.dragging .mole-pill {
-    transform: translateX(0) scale(1.03);
-    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.2);
-    transition: none;
+    width: ${PILL_HEIGHT}px;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+    transform: translateX(0);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.13);
+    /* 保留 transition 实现胶囊→圆球的变形动画 */
+  }
+
+  .mole-trigger.dragging .mole-pill-info {
+    opacity: 0;
+    width: 0;
+    margin: 0;
+    overflow: hidden;
+    transition: opacity 0.12s ease;
+  }
+
+  .mole-trigger.dragging .mole-bg-task-badge {
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+
+  .mole-trigger.dragging .mole-close-btn {
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
   .mole-pill img {
@@ -223,7 +241,7 @@ export const getStyles = () => `
   }
 
   .mole-trigger.task-running .mole-pill {
-    border-color: rgba(0, 113, 227, 0.26);
+    box-shadow: 0 2px 12px rgba(0, 113, 227, 0.18);
   }
 
   .mole-trigger.task-running .mole-pill-meta {
@@ -235,7 +253,7 @@ export const getStyles = () => `
   }
 
   .mole-trigger.task-done .mole-pill {
-    border-color: rgba(36, 138, 61, 0.24);
+    box-shadow: 0 2px 12px rgba(36, 138, 61, 0.18);
   }
 
   .mole-trigger.task-done .mole-pill-meta {
@@ -247,7 +265,7 @@ export const getStyles = () => `
   }
 
   .mole-trigger.task-error .mole-pill {
-    border-color: rgba(215, 0, 21, 0.24);
+    box-shadow: 0 2px 12px rgba(215, 0, 21, 0.18);
   }
 
   .mole-trigger.task-error .mole-pill-meta {
@@ -375,66 +393,56 @@ export const getStyles = () => `
     pointer-events: none;
   }
 
-  /* ---- 关闭按钮 ---- */
+  /* ---- 关闭按钮（角标式，内嵌于 pill） ---- */
   .mole-close-btn {
     position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translate(-50%, 4px);
-    width: 30px;
-    height: 30px;
+    top: -5px;
+    left: -5px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
-    border: 1px solid var(--ec-border);
-    background: linear-gradient(180deg, rgba(248, 251, 255, 0.96) 0%, var(--ec-surface) 100%);
-    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.14);
-    color: var(--ec-text);
+    border: 1.5px solid rgba(255, 255, 255, 0.4);
+    background: rgba(0, 0, 0, 0.28);
+    color: #fff;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     opacity: 0;
     pointer-events: none;
     cursor: pointer;
-    transition: opacity 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-    z-index: 2;
+    transition: opacity 0.18s ease, transform 0.15s ease, background 0.15s ease;
+    z-index: 3;
   }
 
-  .mole-trigger.side-right:not(.task-running):not(.task-done):not(.task-error):not(.announce) .mole-close-btn {
-    left: calc(50% + ${PILL_WIDTH - PILL_COMPACT_WIDTH}px);
-  }
-
-  .mole-trigger.side-left:not(.task-running):not(.task-done):not(.task-error):not(.announce) .mole-close-btn {
-    left: calc(50% - ${PILL_WIDTH - PILL_COMPACT_WIDTH}px);
+  /* 左侧时角标在右上角 */
+  .mole-trigger.side-left .mole-close-btn {
+    left: auto;
+    right: -5px;
   }
 
   .mole-close-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 9px;
+    height: 9px;
     stroke: currentColor;
     fill: none;
-    stroke-width: 2;
+    stroke-width: 2.5;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
 
   .mole-close-btn:hover {
-    transform: translate(-50%, 2px);
-    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.2);
+    background: rgba(0, 0, 0, 0.45);
+    transform: scale(1.12);
   }
 
   .mole-close-btn:focus-visible {
-    box-shadow: var(--ec-focus-ring);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
   }
 
   .mole-trigger.hovering .mole-close-btn,
   .mole-trigger:focus-within .mole-close-btn {
     opacity: 1;
     pointer-events: auto;
-    transform: translate(-50%, 0);
-  }
-
-  .mole-trigger.dragging .mole-close-btn {
-    opacity: 0;
-    pointer-events: none;
   }
 
   .mole-trigger.active .mole-close-btn {
@@ -446,7 +454,7 @@ export const getStyles = () => `
   .mole-close-menu {
     display: none;
     position: absolute;
-    bottom: calc(100% + 44px);
+    bottom: calc(100% + 6px);
     min-width: 180px;
     background: linear-gradient(180deg, var(--ec-surface-strong) 0%, var(--ec-surface) 100%);
     backdrop-filter: blur(22px) saturate(180%);
@@ -1109,13 +1117,13 @@ export const getStyles = () => `
   }
 
   @keyframes mole-pill-snap-right {
-    0% { transform: translateX(0) scale(1.02); }
+    0% { transform: translateX(0); }
     60% { transform: translateX(${TUCK_OFFSET + 10}px) scale(0.98); }
     100% { transform: translateX(${TUCK_OFFSET}px) scale(1); }
   }
 
   @keyframes mole-pill-snap-left {
-    0% { transform: translateX(0) scale(1.02); }
+    0% { transform: translateX(0); }
     60% { transform: translateX(-${TUCK_OFFSET + 10}px) scale(0.98); }
     100% { transform: translateX(-${TUCK_OFFSET}px) scale(1); }
   }
