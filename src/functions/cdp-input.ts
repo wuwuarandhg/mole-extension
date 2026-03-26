@@ -271,28 +271,43 @@ const performDrag = async (
   };
 };
 
-/** 键盘输入文本（逐字符 keyDown → char → keyUp） */
+/** 键盘输入文本（ASCII 走逐字符键盘事件，非 ASCII 走 insertText 避免重复） */
 const performType = async (
   tabId: number,
   text: string,
   intervalMs: number,
   signal?: AbortSignal,
 ): Promise<FunctionResult> => {
+  if (!text) return { success: true, data: { length: 0, message: 'CDP 输入 0 个字符' } };
+
   const normalizedInterval = Math.max(0, Math.min(200, Math.floor(intervalMs)));
 
   for (const char of text) {
-    const r1 = await CDPSessionManager.sendCommand(tabId, 'Input.dispatchKeyEvent', {
-      type: 'keyDown', text: char,
-    });
-    if (!r1.success) return { success: false, error: r1.error };
+    if (signal?.aborted) return { success: false, error: '已取消' };
 
-    await CDPSessionManager.sendCommand(tabId, 'Input.dispatchKeyEvent', {
-      type: 'char', text: char,
-    });
+    const code = char.charCodeAt(0);
 
-    await CDPSessionManager.sendCommand(tabId, 'Input.dispatchKeyEvent', {
-      type: 'keyUp', text: char,
-    });
+    if (code >= 0x20 && code <= 0x7E) {
+      // ASCII 可打印字符：keyDown → char → keyUp（保持键盘事件兼容，autocomplete 等场景需要）
+      const r1 = await CDPSessionManager.sendCommand(tabId, 'Input.dispatchKeyEvent', {
+        type: 'keyDown', text: char,
+      });
+      if (!r1.success) return { success: false, error: r1.error };
+
+      await CDPSessionManager.sendCommand(tabId, 'Input.dispatchKeyEvent', {
+        type: 'char', text: char,
+      });
+
+      await CDPSessionManager.sendCommand(tabId, 'Input.dispatchKeyEvent', {
+        type: 'keyUp', text: char,
+      });
+    } else {
+      // 非 ASCII 字符（中文、日文、emoji 等）：使用 Input.insertText
+      // keyDown + char 双事件会导致 CJK 字符被插入两次（"你好" → "你你好好"）
+      // insertText 模拟 IME 提交，只产生一次输入
+      const r = await CDPSessionManager.sendCommand(tabId, 'Input.insertText', { text: char });
+      if (!r.success) return { success: false, error: r.error };
+    }
 
     if (normalizedInterval > 0) {
       await sleep(normalizedInterval, signal);
