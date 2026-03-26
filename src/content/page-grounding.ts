@@ -767,6 +767,115 @@ const initElementHandleAction = () => {
   });
 };
 
+// ============ 视觉标注 ============
+
+/** 标注容器的 data 属性标识 */
+const ANNOTATION_CONTAINER_ATTR = 'data-mole-annotations';
+
+/** 标注编号上限 */
+const MAX_ANNOTATION_COUNT = 50;
+
+/** 标注项信息（返回给 background） */
+export interface AnnotationEntry {
+  index: number;
+  element_id: string;
+  tag: string;
+  text: string;
+  role?: string;
+  placeholder?: string;
+  aria_label?: string;
+  name?: string;
+  href?: string;
+  rect: { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * 收集视口内可见的可交互元素，注入 DOM 标记，返回映射表
+ */
+const annotateInteractiveElements = (): { success: boolean; annotations?: AnnotationEntry[]; error?: string } => {
+  // 移除旧标注（以防重复调用）
+  removeAnnotations();
+
+  // 收集候选元素
+  const cache = new Map<Element, CachedElementInfo>();
+  const nodes = Array.from(document.querySelectorAll(INTERACTIVE_SELECTOR));
+
+  // 过滤：可见 + 视口内 + 有尺寸
+  const candidates = nodes.filter(el => {
+    const info = getElementInfo(el, cache);
+    return info.visible && info.inViewport && info.rect.width > 0 && info.rect.height > 0;
+  });
+
+  // 按位置排序（上到下、左到右，40px 行容差）
+  candidates.sort((a, b) => {
+    const ra = cache.get(a)!.rect;
+    const rb = cache.get(b)!.rect;
+    const rowDiff = Math.floor(ra.y / 40) - Math.floor(rb.y / 40);
+    return rowDiff !== 0 ? rowDiff : ra.x - rb.x;
+  });
+
+  const selected = candidates.slice(0, MAX_ANNOTATION_COUNT);
+  if (selected.length === 0) {
+    return { success: true, annotations: [] };
+  }
+
+  // 创建标注容器（position:fixed，覆盖整个视口，不接收鼠标事件）
+  const container = document.createElement('div');
+  container.setAttribute(ANNOTATION_CONTAINER_ATTR, 'true');
+  container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483647;';
+
+  const annotations: AnnotationEntry[] = [];
+
+  for (let i = 0; i < selected.length; i++) {
+    const el = selected[i];
+    const index = i + 1;
+    const info = cache.get(el)!;
+    const rect = info.rect;
+    const elementId = getOrCreateElementHandle(el);
+    (el as HTMLElement).dataset.moleHandle = elementId;
+
+    // 半透明高亮边框
+    const highlight = document.createElement('div');
+    highlight.style.cssText = `position:fixed;left:${rect.x}px;top:${rect.y}px;width:${rect.width}px;height:${rect.height}px;border:2px solid rgba(229,62,62,0.6);border-radius:3px;background:rgba(229,62,62,0.08);pointer-events:none;`;
+    container.appendChild(highlight);
+
+    // 编号圆圈标记（放在元素上方或内部）
+    const badge = document.createElement('div');
+    const badgeTop = rect.y >= 22 ? rect.y - 22 : rect.y + 2;
+    const badgeLeft = Math.max(rect.x - 2, 0);
+    badge.style.cssText = `position:fixed;left:${badgeLeft}px;top:${badgeTop}px;min-width:20px;height:20px;border-radius:10px;background:#e53e3e;color:#fff;font-size:11px;font-weight:bold;display:flex;align-items:center;justify-content:center;line-height:1;font-family:Arial,sans-serif;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,0.3);padding:0 4px;`;
+    badge.textContent = String(index);
+    container.appendChild(badge);
+
+    annotations.push({
+      index,
+      element_id: elementId,
+      tag: el.tagName.toLowerCase(),
+      text: clipText(info.text, 60),
+      role: el.getAttribute('role') || undefined,
+      placeholder: el.getAttribute('placeholder') || undefined,
+      aria_label: el.getAttribute('aria-label') || undefined,
+      name: el.getAttribute('name') || undefined,
+      href: el instanceof HTMLAnchorElement ? clipText(el.href, 100) : undefined,
+      rect: {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      },
+    });
+  }
+
+  document.documentElement.appendChild(container);
+  return { success: true, annotations };
+};
+
+/** 移除所有视觉标注 DOM 节点 */
+const removeAnnotations = (): void => {
+  const containers = document.querySelectorAll(`[${ANNOTATION_CONTAINER_ATTR}]`);
+  containers.forEach(c => c.remove());
+};
+
 export const initPageGrounding = () => {
   Channel.on('__page_grounding_snapshot', (data: PageSnapshotParams, _sender, sendResponse) => {
     try {
@@ -814,6 +923,33 @@ export const initPageGrounding = () => {
       });
     } catch (err: any) {
       sendResponse?.({ success: false, error: err.message || '坐标查询失败' });
+    }
+    return true;
+  });
+
+  // 视觉标注：注入交互元素编号标记
+  Channel.on('__annotate_elements', (_data: unknown, _sender: unknown, sendResponse?: (response: any) => void) => {
+    try {
+      const result = annotateInteractiveElements();
+      // 双 rAF 确保标记已渲染到屏幕
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          sendResponse?.(result);
+        });
+      });
+    } catch (err: any) {
+      sendResponse?.({ success: false, error: err.message || '标注失败' });
+    }
+    return true;
+  });
+
+  // 视觉标注：移除所有标记
+  Channel.on('__remove_annotations', (_data: unknown, _sender: unknown, sendResponse?: (response: any) => void) => {
+    try {
+      removeAnnotations();
+      sendResponse?.({ success: true });
+    } catch (err: any) {
+      sendResponse?.({ success: false, error: err.message || '移除标注失败' });
     }
     return true;
   });

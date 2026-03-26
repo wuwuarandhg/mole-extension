@@ -112,8 +112,8 @@ const DEFAULT_BUDGET: LoopBudget = {
 
 const MAX_EMPTY_RETRIES = 2;
 
-/** 每次任务最多注入的截图图片数量（防止上下文膨胀） */
-const MAX_IMAGE_INJECTIONS = 3;
+/** 每次任务最多注入的截图图片数量 */
+const MAX_IMAGE_INJECTIONS = 15;
 
 /** auto_compact 触发阈值（估算 token 数） */
 const AUTO_COMPACT_TOKEN_THRESHOLD = 50000;
@@ -281,10 +281,37 @@ const injectScreenshotImages = async (
       if (!artifact?.dataUrl) continue;
 
       // 构造多模态 user message 追加到 context
-      const content: ContentPart[] = [
-        { type: 'input_text' as const, text: `截图内容（${parsed.data.mode || '可见区域'}）：` },
-        { type: 'input_image' as const, image_url: artifact.dataUrl },
-      ];
+      const content: ContentPart[] = [];
+      const annotations = parsed.data.annotations;
+      const hasAnnotations = Array.isArray(annotations) && annotations.length > 0;
+
+      content.push({
+        type: 'input_text' as const,
+        text: hasAnnotations
+          ? `标注截图（已标注 ${annotations.length} 个可交互元素）：`
+          : `截图内容（${parsed.data.mode || '可见区域'}）：`,
+      });
+
+      content.push({ type: 'input_image' as const, image_url: artifact.dataUrl });
+
+      // 标注映射表（仅标注截图时注入，让 AI 知道每个编号对应的 element_id）
+      if (hasAnnotations) {
+        const mappingLines: string[] = [];
+        for (const a of annotations) {
+          const desc: string[] = [a.tag];
+          if (a.text) desc.push(`"${a.text}"`);
+          else if (a.placeholder) desc.push(`placeholder="${a.placeholder}"`);
+          else if (a.aria_label) desc.push(`aria-label="${a.aria_label}"`);
+          else if (a.name) desc.push(`name="${a.name}"`);
+          if (a.href) desc.push(`[${a.href}]`);
+          mappingLines.push(`${a.index}. ${desc.join(' ')} → element_id=${a.element_id}`);
+        }
+        content.push({
+          type: 'input_text' as const,
+          text: `\n元素映射：\n${mappingLines.join('\n')}\n\n使用 element_id 操作对应元素。`,
+        });
+      }
+
       context.push({ role: 'user' as const, content });
       imageInjectionCount++;
     } catch {

@@ -142,16 +142,18 @@ export const buildSystemPrompt = (
 ## 工具使用原则
 
 ### 操作页面的优先级
-1. skill — 首选：有匹配的预定义工作流时，优先使用，速度快且可靠。当前网站技能可直接 run；基础技能先 detail 查看再 run
-2. page_skeleton — 整体感知：先获取页面骨架了解布局和区域划分（200-500 tokens），再决定下一步
-3. page_snapshot(query=...) — 精确定位：基于骨架树信息定位具体操作元素
-4. cdp_input(element_id=...) — 基于 element_id 精确操作（优先）
-5. cdp_input(selector=...) — 基于 CSS selector 操作（element_id 失效时退回）
-6. cdp_dom — DOM 读写/样式/存储操作
+1. skill — 首选：有匹配的预定义工作流时，优先使用，速度快且可靠
+2. screenshot(annotate=true) — 视觉感知：复杂页面先标注截图，看到全局布局和元素编号后精确操作
+3. page_skeleton — 结构感知：获取页面骨架了解布局（200-500 tokens）
+4. page_snapshot(query=...) — 精确定位：基于骨架树信息定位具体操作元素
+5. cdp_input(element_id=...) — 基于 element_id 精确操作（优先）
+6. cdp_input(selector=...) — 基于 CSS selector 操作（element_id 失效时退回）
+7. cdp_dom — DOM 读写/样式/存储操作
 
 ### 验证时机
-- 关键操作（提交表单、付款、删除）后：用 page_assert 验证
-- 简单操作（点击链接、输入文字）后：不需要专门验证，直接看下一步的结果即可
+- 关键操作（提交表单、付款、删除）后：用 screenshot() 截图验证，或用 page_assert 结构化验证
+- 页面跳转后：用 screenshot(annotate=true) 重新观察新页面
+- 简单操作（点击链接、输入文字）后：不需要专门验证
 - 信息查询类任务：拿到信息就行，不需要验证
 
 ### 失败处理
@@ -215,20 +217,42 @@ export const buildSystemPrompt = (
 - 不要在用户还有疑问或要求修改时直接保存
 - 调用时将完整 workflow 对象 JSON.stringify 后传入 workflow_json 参数（字符串类型）
 
-## 视觉理解
+## 视觉理解与页面操作协议
 
 你具有视觉理解能力。当你调用 screenshot 工具后，截图图片会自动注入到你的上下文中，你可以直接"看"到图片内容。
 
-**适合使用视觉分析的场景：**
-- 页面包含 Canvas、图表、信息图等无法通过 DOM 解析获取的内容
-- 需要理解页面整体布局和视觉层次
-- 验证码识别
-- 页面元素的视觉状态（颜色、位置、大小关系）
+### 标注截图（推荐）
 
-**注意：**
-- 每次任务最多注入 3 张截图图片
-- 优先使用 page_snapshot/page_skeleton 获取结构化数据，截图视觉分析作为补充
-- 不要仅为了"看一看"而截图，只在 DOM 解析不足时使用
+使用 screenshot(annotate=true) 获取带编号标注的截图：
+- 页面上的每个可交互元素会被标注编号（1, 2, 3...）和红色高亮边框
+- 同时返回编号到 element_id 的映射表
+- 你可以看到元素在页面上的位置、外观和编号，然后用映射表中的 element_id 精确操作
+
+### 页面操作协议：Look → Act → Check
+
+操作复杂页面时，遵循以下协议提高准确率：
+
+**Look（观察）**：首次进入页面或页面发生大变化时，先用 screenshot(annotate=true) 观察全局
+**Act（执行）**：根据标注截图选择目标元素，用映射表中的 element_id 执行操作
+**Check（验证）**：关键操作（提交表单、付款、删除）后，用 screenshot() 验证结果
+
+何时需要 Look：
+- 首次进入页面
+- 页面跳转或大变化后
+- 操作失败需要重新评估时
+- 页面上相似元素较多、不确定该操作哪个时
+
+何时不需要 Look：
+- 连续操作同一页面的已知元素（已经有 element_id）
+- 简单的单步操作（用户明确指出了操作目标）
+
+### 普通截图
+
+不带 annotate 参数的截图适用于：
+- Canvas、图表、信息图等无法通过 DOM 解析的内容
+- 验证码识别
+- 验证操作结果（Check 阶段）
+- 页面元素的视觉状态分析
 
 ## 何时停止
 - 拿到了用户要的信息 → 直接回答，停止

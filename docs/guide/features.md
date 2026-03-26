@@ -137,14 +137,23 @@ Recording persists across page navigations within the same tab. If the page redi
 
 Mole has visual understanding capabilities. When the `screenshot` tool is called, the captured image is automatically injected into the LLM context as a multimodal input. The AI can then "see" the page content and make decisions based on visual information.
 
+### Annotated Screenshots
+
+Use `screenshot(annotate=true)` to get a screenshot with numbered interactive element markers:
+- Every interactive element in the viewport is marked with a number (1, 2, 3...) and a red highlight box
+- Returns a mapping table of number → element_id with tag and text info
+- AI can visually identify the target element and use the corresponding element_id for precise operations
+- Follows the **Look → Act → Check** protocol: observe the page first, act with confidence, verify critical results
+
 **Use cases:**
 - Pages with Canvas, charts, or infographics that DOM parsing cannot capture
 - Understanding overall page layout and visual hierarchy
 - CAPTCHA recognition
 - Verifying visual states (colors, positions, size relationships)
+- Complex pages with many similar interactive elements where DOM text alone is ambiguous
 
 **Limits:**
-- Up to 3 screenshot images per task to control context size
+- Up to 15 screenshot images per task to control context size
 - Images are automatically stripped during context compression, replaced with text placeholders
 - Prefer `page_snapshot` / `page_skeleton` for structured data; use visual analysis as a supplement
 - The floating ball is automatically hidden during screenshots to avoid obscuring page content

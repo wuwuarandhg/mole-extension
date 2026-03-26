@@ -11,7 +11,7 @@ MoleClaw 内置了 37+ 个工具，覆盖浏览器自动化的各个场景。AI 
 | `page_skeleton` | 提取页面骨架结构，快速了解页面整体布局 |
 | `page_assert` | 断言页面状态是否符合预期，用于关键操作后的验证 |
 | `page_repair` | 当 page_assert 失败时，尝试自动修复页面状态 |
-| `screenshot` | 页面截图，支持可见区域、全页截图、区域截图和元素截图（CDP 增强） |
+| `screenshot` | 页面截图，支持可见区域、全页截图、区域截图和元素截图（CDP 增强）。`annotate=true` 模式在截图上标注可交互元素编号并返回 element_id 映射表，用于精确定位 |
 | `selection_context` | 获取用户在页面上选中的文本及其上下文信息 |
 
 ## 页面操作类

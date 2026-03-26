@@ -11,7 +11,7 @@ MoleClaw includes 37+ built-in tools covering all aspects of browser automation.
 | `page_skeleton` | Extract page skeleton structure for a quick overview of the overall layout |
 | `page_assert` | Assert whether the page state meets expectations, used for verification after critical operations |
 | `page_repair` | When page_assert fails, attempt to automatically repair the page state |
-| `screenshot` | Take page screenshots — supports visible area, full page, region, and element screenshots (CDP enhanced) |
+| `screenshot` | Take page screenshots — supports visible area, full page, region, and element screenshots (CDP enhanced). `annotate=true` mode overlays numbered markers on interactive elements and returns an element_id mapping table for precise targeting |
 | `selection_context` | Get the text selected by the user on the page along with its surrounding context |
 
 ## Page Operations

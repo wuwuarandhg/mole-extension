@@ -93,6 +93,10 @@ export const screenshotFunction: FunctionDefinition = {
         type: 'string',
         description: 'page_snapshot 返回的元素句柄，自动截取该元素区域。使用 CDP 实现。',
       },
+      annotate: {
+        type: 'boolean',
+        description: '是否在截图上标注可交互元素编号。开启后截图上会显示元素编号标记，并返回编号到 element_id 的映射表。适合首次进入复杂页面时使用，帮助精确定位元素。仅对可见区域截图有效。默认 false。',
+      },
     },
     required: [],
   },
@@ -108,6 +112,7 @@ export const screenshotFunction: FunctionDefinition = {
       clip?: { x: number; y: number; width: number; height: number };
       full_page?: boolean;
       element_id?: string;
+      annotate?: boolean;
     },
     context?: ToolExecutionContext,
   ) => {
@@ -122,6 +127,7 @@ export const screenshotFunction: FunctionDefinition = {
       clip,
       full_page = false,
       element_id,
+      annotate = false,
     } = params;
     const normalizedWaitMs = Math.max(3_000, Math.floor(wait_ms));
     let originalTabId: number | undefined;
@@ -134,6 +140,9 @@ export const screenshotFunction: FunctionDefinition = {
 
     // 判断是否需要走 CDP 路径
     const useCDP = Boolean(validClip || full_page || element_id);
+
+    // 标注模式仅对可见区域截图有效（非 CDP 路径）
+    const shouldAnnotate = annotate && !useCDP;
 
     // 截图前临时隐藏悬浮球的状态标记（在 try 外声明，finally 中使用）
     let floatBallHidden = false;
@@ -184,8 +193,23 @@ export const screenshotFunction: FunctionDefinition = {
         if (floatBallHidden) await sleep(80);
       } catch { /* 忽略 */ }
 
+      // 视觉标注：在页面上注入交互元素编号标记
+      let annotations: any[] | undefined;
+      if (shouldAnnotate) {
+        try {
+          const annotateResp = await sendToTabWithRetry<any>(
+            targetTabId!, '__annotate_elements', {}, { signal, deadlineMs: 8000 },
+          );
+          if (annotateResp?.success && Array.isArray(annotateResp.annotations)) {
+            annotations = annotateResp.annotations;
+          }
+        } catch { /* 标注失败不阻塞截图 */ }
+      }
+
       let base64Data: string;
-      let screenshotMode = '可见区域';
+      let screenshotMode = shouldAnnotate && annotations
+        ? `标注截图（${annotations.length} 个元素）`
+        : '可见区域';
 
       if (useCDP) {
         // === CDP 截图路径 ===
@@ -265,6 +289,11 @@ export const screenshotFunction: FunctionDefinition = {
         base64Data = dataUrl.split(',')[1] || '';
       }
 
+      // 移除视觉标注（截图完成后立即清理）
+      if (shouldAnnotate && targetTabId) {
+        try { Channel.sendToTab(targetTabId, '__remove_annotations', {}); } catch { /* 忽略 */ }
+      }
+
       const sizeKB = Math.round((base64Data.length * 3) / 4 / 1024);
       // CDP 返回纯 base64，需要加 data URL 前缀
       const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
@@ -282,12 +311,18 @@ export const screenshotFunction: FunctionDefinition = {
           target_tab_id: targetTabId,
           target_url: url || targetTab?.url,
           mode: screenshotMode,
+          annotations: annotations || undefined,
           message: `${screenshotMode}完成（${format}，约 ${sizeKB}KB）`,
         },
       };
     } catch (err: any) {
       return { success: false, error: err.message || '截图失败' };
     } finally {
+      // 移除残留标注（确保异常时也能清理）
+      if (shouldAnnotate && targetTabId) {
+        try { Channel.sendToTab(targetTabId, '__remove_annotations', {}); } catch { /* 忽略 */ }
+      }
+
       // 恢复悬浮球显示
       if (floatBallHidden && targetTabId) {
         try { Channel.sendToTab(targetTabId, '__screenshot_show', {}); } catch { /* 忽略 */ }
