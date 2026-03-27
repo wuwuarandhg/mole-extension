@@ -25,6 +25,8 @@ export default {
   async load(): Promise<ReleaseData> {
     const REPO = 'clark-maybe/mole-extension'
     const API = `https://api.github.com/repos/${REPO}/releases/latest`
+    // 固定下载地址，不跟版本号
+    const DOWNLOAD_URL = `https://github.com/${REPO}/releases/download/release/mole-extension.zip`
 
     try {
       const res = await fetch(API, {
@@ -41,7 +43,7 @@ export default {
         version: release.tag_name ?? '',
         publishedAt: release.published_at ?? '',
         body: release.body ?? '',
-        downloadUrl: asset?.browser_download_url ?? release.html_url ?? '',
+        downloadUrl: DOWNLOAD_URL,
         downloadSize: asset?.size ?? 0,
         htmlUrl: release.html_url ?? '',
         hasRelease: true,
