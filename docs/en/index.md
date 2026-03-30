@@ -11,10 +11,10 @@ hero:
   actions:
     - theme: brand
       text: Download Now
-      link: /download
+      link: /en/download
     - theme: alt
       text: What Can Mole Do?
-      link: /guide/examples
+      link: /en/guide/examples
 
 features:
   - icon: "\U0001F4AC"
