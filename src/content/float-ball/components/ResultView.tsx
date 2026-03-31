@@ -5,7 +5,7 @@
  * 改用 React 组件直接渲染，避免 dangerouslySetInnerHTML 导致 DOM 状态丢失
  */
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useMole } from '../context/useMole';
 import { markdownToHtml } from '../markdown';
 import {
@@ -13,6 +13,11 @@ import {
   clipRuntimeText,
   formatDuration,
 } from '../text-utils';
+
+/** 判断滚动容器是否在底部附近（阈值 60px） */
+const isNearBottom = (el: HTMLElement, threshold = 60): boolean => {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+};
 
 /** 工具调用折叠组 */
 const CallsGroup: React.FC<{
@@ -112,14 +117,27 @@ const AgentStatePanel: React.FC<{
 export const ResultView: React.FC = () => {
   const { state } = useMole();
   const resultRef = useRef<HTMLDivElement>(null);
+  // 追踪用户是否在底部附近，新任务开始时重置为 true
+  const userAtBottomRef = useRef(true);
   const task = state.currentTask;
 
-  // 自动滚动到底部
+  // 监听用户滚动：实时更新是否在底部
+  const handleScroll = useCallback(() => {
+    const el = resultRef.current;
+    if (el) userAtBottomRef.current = isNearBottom(el);
+  }, []);
+
+  // 新任务开始时重置滚动状态
+  useEffect(() => {
+    userAtBottomRef.current = true;
+  }, [task?.id]);
+
+  // 智能滚动：仅在用户处于底部附近时才自动滚动
   useEffect(() => {
     const el = resultRef.current;
-    if (el) {
+    if (el && userAtBottomRef.current) {
       requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight;
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
       });
     }
   }, [task?.lastAIText, task?.status, task?.liveStatusText, task?.callStack?.length]);
@@ -138,7 +156,7 @@ export const ResultView: React.FC = () => {
   const durationText = duration !== null ? formatDuration(duration) : '';
 
   return (
-    <div className="mole-result visible" ref={resultRef}>
+    <div className="mole-result visible" ref={resultRef} onScroll={handleScroll}>
       {/* 进展面板 */}
       {(isRunning || isFinished) && (
         <AgentStatePanel
