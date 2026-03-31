@@ -1215,8 +1215,8 @@ export const getStyles = () => `
     width: 6px;
     height: 6px;
     border-radius: 999px;
-    margin-top: 5px;
     background: rgba(22, 119, 255, 0.18);
+    flex-shrink: 0;
   }
 
   @keyframes mole-pulse {
@@ -1351,12 +1351,12 @@ export const getStyles = () => `
 
   .mole-calls-detail {
     display: none;
-    padding: 4px 2px 0;
+    padding: 3px 0 0;
   }
 
   .mole-calls-detail.open {
     display: grid;
-    gap: 3px;
+    gap: 2px;
   }
 
   .mole-calls-detail .mole-call-item {
@@ -1365,10 +1365,10 @@ export const getStyles = () => `
 
   .mole-call-header {
     display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    padding: 4px 8px;
-    border-radius: 6px;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 6px;
+    border-radius: 5px;
     cursor: default;
     font-size: 11px;
     color: var(--ec-text-soft);
@@ -1417,24 +1417,29 @@ export const getStyles = () => `
 
   .mole-call-main {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: baseline;
+    gap: 6px;
     min-width: 0;
     flex: 1;
+    overflow: hidden;
   }
 
   .mole-call-title {
     line-height: 1.4;
     font-weight: 600;
     color: var(--ec-text);
+    flex-shrink: 0;
   }
 
   .mole-call-intent {
-    font-size: 11px;
-    line-height: 1.45;
+    font-size: 10px;
+    line-height: 1.4;
     color: var(--ec-text-muted);
     font-weight: 400;
-    word-break: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .mole-call-body {
