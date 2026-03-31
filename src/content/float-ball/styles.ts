@@ -935,10 +935,10 @@ export const getStyles = () => `
 
   /* 调度状态机日志 */
   .mole-agent-state-panel {
-    margin: 8px 0;
-    border-radius: 12px;
+    margin: 4px 0;
+    border-radius: 8px;
     border: none;
-    background: rgba(248, 250, 253, 0.82);
+    background: rgba(248, 250, 253, 0.6);
     overflow: hidden;
   }
 
@@ -946,29 +946,29 @@ export const getStyles = () => `
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 6px;
-    padding: 10px 12px;
+    gap: 4px;
+    padding: 6px 10px;
     font-size: 11px;
-    color: var(--ec-primary-strong);
+    color: var(--ec-text-muted);
     background: transparent;
-    font-weight: 600;
+    font-weight: 500;
     user-select: none;
     cursor: pointer;
     transition: background 0.18s ease;
   }
 
   .mole-agent-state-panel.is-live .mole-agent-state-title {
-    background: rgba(22, 119, 255, 0.03);
+    background: rgba(22, 119, 255, 0.02);
   }
 
   .mole-agent-state-title-main {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     min-width: 0;
-    font-size: 11px;
+    font-size: 10px;
     letter-spacing: 0.02em;
-    color: var(--ec-text-soft);
+    color: var(--ec-text-muted);
   }
 
   .mole-agent-state-summary {
@@ -980,24 +980,24 @@ export const getStyles = () => `
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--ec-text);
-    font-weight: 600;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.72);
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--ec-text-soft);
+    font-weight: 500;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.55);
     border: none;
   }
 
   .mole-agent-state-panel.is-live .mole-agent-state-summary::before {
     content: '';
     display: inline-block;
-    width: 6px;
-    height: 6px;
-    margin-right: 6px;
+    width: 5px;
+    height: 5px;
+    margin-right: 5px;
     border-radius: 999px;
-    background: rgba(0, 113, 227, 0.72);
+    background: rgba(0, 113, 227, 0.55);
     animation: mole-pulse 2.6s ease-in-out infinite;
     vertical-align: middle;
   }
@@ -1054,8 +1054,8 @@ export const getStyles = () => `
 
   .mole-task-runtime-board {
     display: none;
-    gap: 8px;
-    padding: 0 14px 14px;
+    gap: 6px;
+    padding: 0 10px 10px;
     background: transparent;
   }
 
@@ -1172,15 +1172,15 @@ export const getStyles = () => `
   .mole-runtime-now {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 9px 11px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.68);
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.5);
     border: none;
-    color: var(--ec-text);
-    font-size: 12px;
-    line-height: 1.5;
-    font-weight: 600;
+    color: var(--ec-text-soft);
+    font-size: 11px;
+    line-height: 1.45;
+    font-weight: 500;
   }
 
   .mole-runtime-now-text {
@@ -1191,15 +1191,15 @@ export const getStyles = () => `
   .mole-inline-loader {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     flex-shrink: 0;
   }
 
   .mole-inline-loader span {
-    width: 4px;
-    height: 4px;
+    width: 3px;
+    height: 3px;
     border-radius: 999px;
-    background: rgba(22, 119, 255, 0.58);
+    background: rgba(22, 119, 255, 0.45);
     animation: mole-loader-fade 1.2s ease-in-out infinite;
   }
 
@@ -1212,11 +1212,11 @@ export const getStyles = () => `
   }
 
   .mole-task-runtime-step-dot {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
     border-radius: 999px;
-    margin-top: 7px;
-    background: rgba(22, 119, 255, 0.22);
+    margin-top: 5px;
+    background: rgba(22, 119, 255, 0.18);
   }
 
   @keyframes mole-pulse {
@@ -1297,40 +1297,40 @@ export const getStyles = () => `
   }
 
   .mole-func-icon {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     border-radius: 3px;
     flex-shrink: 0;
   }
 
   /* ---- 函数调用折叠区 ---- */
   .mole-calls-group {
-    margin: 4px 0 0;
+    margin: 2px 0 0;
   }
 
   .mole-calls-summary {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 10px;
-    background: rgba(22, 119, 255, 0.05);
+    gap: 5px;
+    padding: 5px 8px;
+    background: rgba(22, 119, 255, 0.03);
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
-    color: var(--ec-primary-strong);
+    color: var(--ec-text-muted);
     user-select: none;
     transition: background 0.15s ease;
   }
 
   .mole-calls-summary:hover {
-    background: rgba(22, 119, 255, 0.08);
+    background: rgba(22, 119, 255, 0.06);
   }
 
   .mole-calls-summary .arrow {
     display: inline-block;
-    font-size: 10px;
+    font-size: 9px;
     transition: transform 0.2s ease;
   }
 
@@ -1351,12 +1351,12 @@ export const getStyles = () => `
 
   .mole-calls-detail {
     display: none;
-    padding: 8px 2px 0;
+    padding: 4px 2px 0;
   }
 
   .mole-calls-detail.open {
     display: grid;
-    gap: 6px;
+    gap: 3px;
   }
 
   .mole-calls-detail .mole-call-item {
@@ -1366,15 +1366,15 @@ export const getStyles = () => `
   .mole-call-header {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: 8px;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 6px;
     cursor: default;
-    font-size: 12px;
-    color: var(--ec-text);
+    font-size: 11px;
+    color: var(--ec-text-soft);
     user-select: none;
     border: none;
-    background: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.45);
   }
 
   .mole-call-item.tone-status .mole-call-header {
