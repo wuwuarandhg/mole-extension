@@ -68,11 +68,24 @@ export const useAIStream = (resultRef: React.RefObject<HTMLDivElement | null>) =
           const funcName = parsed?.name || '';
           const icon = FUNCTION_ICONS[funcName] || '';
           let label = FUNCTION_LABELS[funcName] || funcName || '操作执行';
-          // skill/site_workflow 工具：从 arguments 中提取具体的 workflow 名称
-          if ((funcName === 'skill' || funcName === 'site_workflow') && parsed?.arguments) {
+          // 从 arguments 中提取具体描述，让执行过程更直观
+          if (parsed?.arguments) {
             try {
               const args = typeof parsed.arguments === 'string' ? JSON.parse(parsed.arguments) : parsed.arguments;
-              if (args?.name) label = `${label}：${args.name}`;
+              if (funcName === 'skill' || funcName === 'site_workflow') {
+                if (args?.name) label = `${label}：${args.name}`;
+              } else if (funcName === 'todo') {
+                const action = args?.action;
+                if (action === 'create' && Array.isArray(args.items)) {
+                  label = `${label}：创建 ${args.items.length} 步计划`;
+                } else if (action === 'update' && args.status === 'in_progress') {
+                  label = `${label}：开始「${args.title || `#${args.id}`}」`;
+                } else if (action === 'update' && args.status === 'completed') {
+                  label = `${label}：完成「${args.title || `#${args.id}`}」`;
+                } else if (action === 'add' && args.title) {
+                  label = `${label}：追加「${args.title}」`;
+                }
+              }
             } catch { /* 忽略 */ }
           }
           const intentText = buildToolIntentText(funcName, parsed?.summary || '');
