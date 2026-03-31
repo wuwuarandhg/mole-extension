@@ -11,18 +11,23 @@ export const escapeHtml = (text: string): string => {
     .replace(/"/g, '&quot;');
 };
 
-/** 内联 Markdown：加粗、斜体、行内代码、链接 */
+/** 内联 Markdown：加粗、斜体、删除线、行内代码、链接 */
 export const inlineMarkdown = (escaped: string): string => {
   return escaped
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/~~(.+?)~~/g, '<del>$1</del>')
     .replace(/`(.+?)`/g, '<code>$1</code>')
     .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 };
 
 /** Markdown 文本转 HTML（支持标题、列表、表格、水平线、段落、内联格式） */
 export const markdownToHtml = (text: string): string => {
-  const blocks = text.split(/\n{2,}/);
+  // 预处理：确保标题行、水平线、代码块围栏独立成 block
+  const preprocessed = text
+    .replace(/^(#{1,6}\s+.+)$/gm, '\n\n$1\n\n')
+    .replace(/^([-*_]{3,})\s*$/gm, '\n\n$1\n\n');
+  const blocks = preprocessed.split(/\n{2,}/);
   let html = '';
 
   for (const block of blocks) {

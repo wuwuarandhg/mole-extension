@@ -1816,6 +1816,13 @@ export const getStyles = () => `
     text-decoration: underline;
     text-underline-offset: 2px;
   }
+  .mole-answer del {
+    text-decoration: line-through;
+    opacity: 0.6;
+  }
+  .mole-answer em {
+    font-style: italic;
+  }
 
   /* 错误信息 */
   .mole-error {
