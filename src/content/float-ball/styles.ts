@@ -1713,22 +1713,18 @@ export const getStyles = () => `
 
   .mole-answer p {
     margin: 0;
-    animation: mole-answer-fadein 0.3s ease-out;
   }
 
   .mole-answer p + p {
     margin-top: 10px;
   }
 
-  /* 流式内容淡入 */
-  .mole-answer h3, .mole-answer h4, .mole-answer h5,
-  .mole-answer ul, .mole-answer ol,
-  .mole-answer pre, .mole-answer blockquote,
-  .mole-answer table, .mole-answer hr {
-    animation: mole-answer-fadein 0.3s ease-out;
+  /* 流式增量淡入：仅对新追加的块级元素生效 */
+  .mole-answer-new {
+    animation: mole-answer-fadein 0.35s ease-out;
   }
   @keyframes mole-answer-fadein {
-    from { opacity: 0; transform: translateY(4px); }
+    from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 

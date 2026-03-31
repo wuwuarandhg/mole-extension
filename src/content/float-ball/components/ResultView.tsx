@@ -117,6 +117,8 @@ const AgentStatePanel: React.FC<{
 export const ResultView: React.FC = () => {
   const { state } = useMole();
   const resultRef = useRef<HTMLDivElement>(null);
+  const answerRef = useRef<HTMLDivElement>(null);
+  const prevTaskIdRef = useRef('');
   // 追踪用户是否在底部附近，新任务开始时重置为 true
   const userAtBottomRef = useRef(true);
   const task = state.currentTask;
@@ -141,6 +143,68 @@ export const ResultView: React.FC = () => {
       });
     }
   }, [task?.lastAIText, task?.status, task?.liveStatusText, task?.callStack?.length]);
+
+  // 增量 DOM 更新：只对新出现的块级元素加淡入动画，已有元素就地更新，避免全量替换闪烁
+  useEffect(() => {
+    const el = answerRef.current;
+    if (!el) return;
+
+    const text = task?.lastAIText || '';
+    const html = text ? markdownToHtml(text) : '';
+    const taskId = task?.id || '';
+
+    // 任务切换 → 全量替换
+    if (taskId !== prevTaskIdRef.current) {
+      el.innerHTML = html;
+      prevTaskIdRef.current = taskId;
+      return;
+    }
+
+    if (!html) { el.innerHTML = ''; return; }
+
+    // 解析新 HTML 到临时容器对比
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+
+    const oldCount = el.childElementCount;
+    const newCount = temp.childElementCount;
+
+    // 首次出现内容 → 写入并对所有子元素加淡入
+    if (oldCount === 0) {
+      el.innerHTML = html;
+      for (const child of Array.from(el.children)) {
+        (child as HTMLElement).classList.add('mole-answer-new');
+      }
+      return;
+    }
+
+    // 结构大幅变化（元素变少，罕见：markdown 重解析） → 全量替换
+    if (newCount < oldCount) {
+      el.innerHTML = html;
+      return;
+    }
+
+    // 就地更新最后一个已有元素（流式追加到当前段落/代码块等）
+    const lastIdx = oldCount - 1;
+    const oldLast = el.children[lastIdx];
+    const newLast = temp.children[lastIdx];
+    if (oldLast && newLast) {
+      if (oldLast.tagName === newLast.tagName) {
+        // 同类型：直接更新内容
+        oldLast.innerHTML = newLast.innerHTML;
+      } else {
+        // 类型变了（如文本变列表）：替换节点
+        el.replaceChild(newLast.cloneNode(true), oldLast);
+      }
+    }
+
+    // 追加新出现的块级元素，带淡入动画
+    for (let i = oldCount; i < newCount; i++) {
+      const newChild = temp.children[i].cloneNode(true) as HTMLElement;
+      newChild.classList.add('mole-answer-new');
+      el.appendChild(newChild);
+    }
+  }, [task?.lastAIText, task?.id]);
 
   if (!task) return null;
 
@@ -169,13 +233,12 @@ export const ResultView: React.FC = () => {
         </AgentStatePanel>
       )}
 
-      {/* AI 文本回复 */}
-      {task.lastAIText && (
-        <div
-          className="mole-answer"
-          dangerouslySetInnerHTML={{ __html: markdownToHtml(task.lastAIText) }}
-        />
-      )}
+      {/* AI 文本回复 — ref 管理 DOM 实现增量更新 */}
+      <div
+        className="mole-answer"
+        ref={answerRef}
+        style={!task.lastAIText ? { display: 'none' } : undefined}
+      />
 
       {/* 错误信息 */}
       {task.status === 'error' && task.errorMsg && (
