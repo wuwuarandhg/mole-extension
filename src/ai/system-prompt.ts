@@ -153,10 +153,14 @@ export const buildSystemPrompt = (
 1. 用 tab_navigate(action='open', url='...') 打开新标签页，返回值中包含 tab_id
 2. 用 page_snapshot(tab_id=新tab_id) 获取新页面的内容和元素
 3. 后续对该标签页的所有操作都传 tab_id 参数
-4. 操作完毕后用 tab_navigate(action='close', tab_id=...) 关闭不再需要的标签页
+
+**标签页生命周期（自动清理）：**
+- 你打开的所有标签页在**任务结束后会自动关闭**，无需手动 close
+- 如果用户明确要求保留某个标签页（如"帮我打开XX让我看看"），使用 keep_alive=true 参数：tab_navigate(action='open', url='...', keep_alive=true)
+- 不确定是否保留时，**不要**传 keep_alive（默认自动关闭）
 
 **重要规则：**
-- **禁止用 tab_navigate(action='navigate') 跳转用户当前页面**。要访问新网站时，必须用 tab_navigate(action='open') 在新标签页打开，保持用户当前页面不变
+- **绝对禁止用 tab_navigate(action='navigate') 跳转用户当前页面**。要访问新网站时，必须用 tab_navigate(action='open') 在新标签页打开，保持用户当前页面不变
 - element_id 是标签页私有的，不能跨标签页复用
 - 切换到新标签页前，先用 page_snapshot(tab_id=目标tab) 获取该页面的元素
 - 不传 tab_id 时，默认操作用户发起对话时所在的标签页

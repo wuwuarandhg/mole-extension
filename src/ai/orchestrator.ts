@@ -37,6 +37,7 @@ import { buildSiteWorkflowSchema } from '../functions/site-workflow';
 import { buildSkillContext } from '../functions/skill';
 import type { SkillGuideEntry, SkillCatalogEntry } from '../functions/skill';
 import { TodoManager } from './todo-manager';
+import { TabTracker } from './tab-tracker';
 import type { TodoSnapshot } from './todo-manager';
 import { createTodoFunction } from '../functions/todo';
 
@@ -545,6 +546,47 @@ const performAutoCompact = async (
   }
 };
 
+// ============ 标签页追踪 ============
+
+/** 扫描工具调用结果，追踪 tab_navigate 打开/关闭的标签页 */
+const scanTabNavigateResults = (
+  calls: OutputFunctionCallItem[],
+  results: InputItem[],
+  tracker: TabTracker,
+) => {
+  for (const fc of calls) {
+    if (fc.name !== 'tab_navigate') continue;
+    try {
+      const params = JSON.parse(fc.arguments || '{}');
+      const action = params.action;
+      if (action !== 'open' && action !== 'close' && action !== 'duplicate') continue;
+
+      // 找到对应的结果
+      const resultItem = results.find(
+        r => 'call_id' in r && r.call_id === fc.call_id,
+      ) as FunctionCallOutputItem | undefined;
+      if (!resultItem) continue;
+
+      const output = JSON.parse(resultItem.output || '{}');
+      if (!output.success) continue;
+
+      if (action === 'open' || action === 'duplicate') {
+        const newTabId = output.data?.tab_id;
+        if (typeof newTabId === 'number') {
+          tracker.trackOpened(newTabId, !!params.keep_alive);
+        }
+      } else if (action === 'close') {
+        const closedId = params.tab_id || output.data?.tab_id;
+        if (typeof closedId === 'number') {
+          tracker.trackClosed(closedId);
+        }
+      }
+    } catch {
+      // JSON 解析失败，跳过
+    }
+  }
+};
+
 // ============ 核心循环 ============
 
 /**
@@ -563,6 +605,7 @@ const agenticLoop = async (
   todoManager?: TodoManager,
   todoFn?: ReturnType<typeof createTodoFunction>,
   phaseControl?: PhaseControl,
+  tabTracker?: TabTracker,
 ): Promise<InputItem[]> => {
   let round = 0;
   let totalToolCalls = 0;
@@ -667,6 +710,9 @@ const agenticLoop = async (
         const results = await executeToolCalls(functionCalls, tabId, signal, emit);
         for (const r of results) context.push(r);
 
+        // 追踪标签页打开/关闭
+        if (tabTracker) scanTabNavigateResults(functionCalls, results, tabTracker);
+
         // 注入截图图片到上下文（视觉理解）
         imageInjectionCount = await injectScreenshotImages(functionCalls, results, context, imageInjectionCount);
 
@@ -711,6 +757,7 @@ const agenticLoop = async (
           return agenticLoop(
             subContext, subTools, config.buildPrompt(), subBudget,
             tabId, runnerSignal || signal, emit, undefined, depth + 1,
+            undefined, undefined, undefined, tabTracker,
           );
         };
       }
@@ -842,6 +889,9 @@ const agenticLoop = async (
       if (regularCalls.length > 0) {
         const results = await executeToolCalls(regularCalls, tabId, signal, emit, subagentRunners);
         for (const r of results) context.push(r);
+
+        // 追踪标签页打开/关闭
+        if (tabTracker) scanTabNavigateResults(regularCalls, results, tabTracker);
 
         // 注入截图图片到上下文（视觉理解）
         imageInjectionCount = await injectScreenshotImages(regularCalls, results, context, imageInjectionCount);
@@ -1342,6 +1392,7 @@ const phaseOrchestrator = async (
   previousContext: InputItem[] | undefined,
   todoManager: TodoManager,
   todoFn: ReturnType<typeof createTodoFunction>,
+  tabTracker?: TabTracker,
 ): Promise<InputItem[]> => {
   const originalQuery = query;
   let lastContext: InputItem[] = [];
@@ -1383,7 +1434,7 @@ const phaseOrchestrator = async (
     const resultContext = await agenticLoop(
       context, tools, systemPrompt, budget,
       tabId, signal, emit, options, 0,
-      todoManager, todoFn, phaseControl,
+      todoManager, todoFn, phaseControl, tabTracker,
     );
 
     lastContext = resultContext;
@@ -1525,10 +1576,16 @@ export const handleChat = async (
   // 构建系统提示词（域级 guide 直接注入，全局只放目录）
   const systemPrompt = buildSystemPrompt(tools, true, domainGuides, globalCatalog);
 
-  // 通过阶段编排器执行（简单任务零开销，长任务自动交接）
-  return phaseOrchestrator(
-    query, tools, systemPrompt, budget,
-    tabId, signal, onEvent, options,
-    previousContext, todoManager, todoFn,
-  );
+  // 标签页生命周期追踪：任务结束后自动关闭 AI 打开的标签页
+  const tabTracker = new TabTracker();
+  try {
+    return await phaseOrchestrator(
+      query, tools, systemPrompt, budget,
+      tabId, signal, onEvent, options,
+      previousContext, todoManager, todoFn, tabTracker,
+    );
+  } finally {
+    // 无论成功/失败/取消，都清理 AI 打开的标签页
+    await tabTracker.closeAll();
+  }
 };

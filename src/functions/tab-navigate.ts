@@ -45,6 +45,10 @@ export const tabNavigateFunction: FunctionDefinition = {
         type: 'number',
         description: '移动到的目标位置（action=move，0 为最左）',
       },
+      keep_alive: {
+        type: 'boolean',
+        description: '为 true 时标记此标签页在任务结束后保留，不自动关闭。仅 action=open/duplicate 时生效。默认 false（任务结束自动关闭）',
+      },
     },
     required: ['action'],
   },
