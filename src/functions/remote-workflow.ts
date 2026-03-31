@@ -188,7 +188,7 @@ const resolveTemplateValue = (value: unknown, vars: Record<string, unknown>): un
 
 const normalizePlanCloseMode = (raw: unknown): PlanTabCloseMode => {
   if (raw === true) return 'on_success';
-  if (raw === false || raw == null) return 'never';
+  if (raw === false || raw == null) return 'on_success';
   const value = String(raw || '').trim().toLowerCase();
   if (value === 'always') return 'always';
   if (value === 'on_failure') return 'on_failure';
@@ -332,7 +332,7 @@ const runRemotePlan = async (
   inputParams: Record<string, unknown>,
   context?: ToolExecutionContext,
 ): Promise<FunctionResult> => {
-  const closeMode = plan.tabLifecycle?.closeOpenedTabs || 'never';
+  const closeMode = plan.tabLifecycle?.closeOpenedTabs || 'on_success';
   const openedCleanupTabIds = new Set<number>();
   const openedKeepAliveTabIds = new Set<number>();
   const closedTabIds: number[] = [];
