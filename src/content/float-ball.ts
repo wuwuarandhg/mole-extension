@@ -441,6 +441,23 @@ export const initFloatBall = async () => {
   let recorderStartedAt = 0;
   let isRecorderAuditing = false;
 
+  interface AvailableWorkflowItem {
+    engine: 'skill' | 'site_workflow';
+    workflowId?: string;
+    name: string;
+    label: string;
+    description: string;
+    skillName?: string;
+    skillLabel?: string;
+    scope?: 'global' | 'domain';
+    source?: 'builtin' | 'remote' | 'user';
+    parameters: Record<string, any>;
+    requiredParams: string[];
+    hasRequiredParams: boolean;
+  }
+
+  let availableWorkflows: AvailableWorkflowItem[] = [];
+
   // 初始化时获取自身 tabId
   Channel.send('__get_tab_info', {}, (tabInfo: any) => {
     if (tabInfo && typeof tabInfo.id === 'number') {
@@ -1888,40 +1905,185 @@ export const initFloatBall = async () => {
     dividerBottomEl.style.display = 'none';
   };
 
-  /** 渲染当前页面匹配的 workflow 快捷操作卡片 */
+  const getWorkflowFormKey = (workflow: AvailableWorkflowItem): string =>
+    workflow.engine === 'skill'
+      ? String(workflow.workflowId || workflow.name)
+      : `legacy:${workflow.name}`;
+
+  const summarizeWorkflowParams = (workflow: AvailableWorkflowItem, params: Record<string, unknown>): string => {
+    const parts = Object.entries(params)
+      .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+      .slice(0, 3)
+      .map(([key, value]) => `${key}=${String(value)}`);
+    if (parts.length === 0) return workflow.label;
+    return `${workflow.label} · ${parts.join('，')}`;
+  };
+
+  const buildWorkflowShortcutQuery = (workflow: AvailableWorkflowItem, params?: Record<string, unknown>): string => {
+    const toolName = workflow.engine;
+    const target = workflow.engine === 'skill'
+      ? String(workflow.workflowId || workflow.name)
+      : workflow.name;
+    const normalizedParams = params && Object.keys(params).length > 0
+      ? JSON.stringify(params)
+      : '';
+    return normalizedParams ? `${toolName}:${target}|${normalizedParams}` : `${toolName}:${target}`;
+  };
+
+  const renderWorkflowList = () => {
+    if (availableWorkflows.length === 0) return;
+    const itemsHtml = availableWorkflows.map((workflow) => {
+      const key = getWorkflowFormKey(workflow);
+      const badge = workflow.hasRequiredParams
+        ? '<span class="mole-workflow-pill">需参数</span>'
+        : '<span class="mole-workflow-pill ready">可直接运行</span>';
+      const metaParts = [
+        workflow.skillLabel ? escapeHtml(workflow.skillLabel) : '',
+        workflow.scope === 'global' ? '通用' : '当前站点',
+        workflow.source === 'user' ? '我的流程' : (workflow.source === 'remote' ? '同步流程' : '内置流程'),
+      ].filter(Boolean);
+      return `<button type="button" class="mole-workflow-item" data-workflow-key="${escapeHtml(key)}">
+        <span class="mole-workflow-item-head">
+          <span class="mole-workflow-item-label">${escapeHtml(workflow.label)}</span>
+          ${badge}
+        </span>
+        <span class="mole-workflow-item-desc">${escapeHtml(workflow.description || '预定义流程')}</span>
+        <span class="mole-workflow-item-meta">${metaParts.join(' · ')}</span>
+      </button>`;
+    }).join('');
+
+    resultEl.innerHTML = `<div class="mole-workflow-hints">
+      <div class="mole-workflow-hints-head">
+        <div class="mole-workflow-hints-title">当前页可用工作流</div>
+        <div class="mole-workflow-hints-count">${availableWorkflows.length} 个</div>
+      </div>
+      <div class="mole-workflow-list">${itemsHtml}</div>
+    </div>`;
+    showResult();
+  };
+
+  const renderWorkflowForm = (workflow: AvailableWorkflowItem) => {
+    const properties = workflow.parameters?.properties && typeof workflow.parameters.properties === 'object'
+      ? workflow.parameters.properties as Record<string, any>
+      : {};
+    const required = new Set(workflow.requiredParams);
+    const fieldsHtml = Object.entries(properties).map(([key, schema]) => {
+      const type = String(schema?.type || 'string');
+      const description = String(schema?.description || '').trim();
+      const defaultValue = schema?.default;
+      const requiredTag = required.has(key) ? '<span class="mole-workflow-field-required">必填</span>' : '';
+      if (type === 'boolean') {
+        const checked = defaultValue === true ? ' checked' : '';
+        return `<label class="mole-workflow-field">
+          <span class="mole-workflow-field-label">${escapeHtml(key)}${requiredTag}</span>
+          <span class="mole-workflow-field-desc">${escapeHtml(description || '开关参数')}</span>
+          <label class="mole-workflow-checkbox">
+            <input type="checkbox" data-param-key="${escapeHtml(key)}" data-param-type="boolean"${checked} />
+            <span>启用</span>
+          </label>
+        </label>`;
+      }
+      const inputType = type === 'number' || type === 'integer' ? 'number' : 'text';
+      const stepAttr = inputType === 'number' ? ' step="any"' : '';
+      const valueAttr = defaultValue !== undefined ? ` value="${escapeHtml(String(defaultValue))}"` : '';
+      return `<label class="mole-workflow-field">
+        <span class="mole-workflow-field-label">${escapeHtml(key)}${requiredTag}</span>
+        <span class="mole-workflow-field-desc">${escapeHtml(description || '参数')}</span>
+        <input class="mole-workflow-field-input" type="${inputType}" data-param-key="${escapeHtml(key)}" data-param-type="${escapeHtml(type)}"${stepAttr}${valueAttr} />
+      </label>`;
+    }).join('');
+
+    resultEl.innerHTML = `<div class="mole-workflow-hints">
+      <div class="mole-workflow-form-head">
+        <button type="button" class="mole-workflow-back-btn">返回</button>
+        <div class="mole-workflow-form-title">${escapeHtml(workflow.label)}</div>
+      </div>
+      <div class="mole-workflow-form-desc">${escapeHtml(workflow.description || '填写参数后运行工作流')}</div>
+      <div class="mole-workflow-form-fields">${fieldsHtml || '<div class="mole-workflow-form-empty">这个流程没有额外参数。</div>'}</div>
+      <div class="mole-workflow-form-actions">
+        <button type="button" class="mole-workflow-run-btn" data-workflow-key="${escapeHtml(getWorkflowFormKey(workflow))}">运行流程</button>
+      </div>
+    </div>`;
+    showResult();
+  };
+
+  const collectWorkflowParams = (workflow: AvailableWorkflowItem): { params?: Record<string, unknown>; error?: string } => {
+    const container = resultEl.querySelector('.mole-workflow-hints');
+    if (!container) return { params: {} };
+    const properties = workflow.parameters?.properties && typeof workflow.parameters.properties === 'object'
+      ? workflow.parameters.properties as Record<string, any>
+      : {};
+    const required = new Set(workflow.requiredParams);
+    const params: Record<string, unknown> = {};
+
+    for (const [key, schema] of Object.entries(properties)) {
+      const type = String(schema?.type || 'string');
+      const field = container.querySelector(`[data-param-key="${CSS.escape(key)}"]`) as HTMLInputElement | null;
+      if (!field) continue;
+
+      if (type === 'boolean') {
+        params[key] = field.checked;
+        continue;
+      }
+
+      const rawValue = field.value.trim();
+      if (!rawValue) {
+        if (required.has(key)) return { error: `请填写参数：${key}` };
+        continue;
+      }
+
+      if (type === 'number' || type === 'integer') {
+        const numeric = Number(rawValue);
+        if (!Number.isFinite(numeric)) {
+          return { error: `参数 ${key} 必须是数字` };
+        }
+        params[key] = type === 'integer' ? Math.trunc(numeric) : numeric;
+        continue;
+      }
+
+      params[key] = rawValue;
+    }
+
+    return { params };
+  };
+
+  /** 渲染当前页面匹配的 workflow 列表 */
   const renderWorkflowHints = () => {
-    // 仅在 idle 或 done 状态时显示
     if (currentTask && currentTask.status === 'running') return;
 
     const url = window.location.href;
     Channel.send('__site_workflows_match', { url }, (response: any) => {
-      // 响应回来时再次确认仍然是 idle/done 状态且搜索框打开
       if (currentTask?.status === 'running' || !isOpen) return;
-      // 如果已有 resultHtml（done 状态恢复），不覆盖
       if (currentTask?.resultHtml) return;
 
-      const workflows: Array<{
-        name: string;
-        label: string;
-        description: string;
-        hasRequiredParams: boolean;
-      }> = response?.success && Array.isArray(response.workflows) ? response.workflows : [];
+      const workflows: AvailableWorkflowItem[] = response?.success && Array.isArray(response.workflows)
+        ? response.workflows.map((item: any) => ({
+            engine: item?.engine === 'site_workflow' ? 'site_workflow' : 'skill',
+            workflowId: typeof item?.workflowId === 'string' ? item.workflowId : undefined,
+            name: String(item?.name || '').trim(),
+            label: String(item?.label || item?.name || '').trim(),
+            description: String(item?.description || '').trim(),
+            skillName: typeof item?.skillName === 'string' ? item.skillName : undefined,
+            skillLabel: typeof item?.skillLabel === 'string' ? item.skillLabel : undefined,
+            scope: item?.scope === 'global' ? 'global' : 'domain',
+            source: item?.source === 'user' || item?.source === 'remote' ? item.source : 'builtin',
+            parameters: item?.parameters && typeof item.parameters === 'object'
+              ? item.parameters as Record<string, any>
+              : { type: 'object', properties: {} },
+            requiredParams: Array.isArray(item?.requiredParams)
+              ? item.requiredParams.map((entry: unknown) => String(entry || '').trim()).filter(Boolean)
+              : [],
+            hasRequiredParams: item?.hasRequiredParams === true,
+          }))
+        : [];
 
       if (workflows.length === 0) return;
-
-      // 如果 resultEl 中已经有 workflow-hints 卡片或其他内容，跳过
       if (resultEl.querySelector('.mole-workflow-hints')) return;
       if (resultEl.innerHTML.trim()) return;
 
-      const chipsHtml = workflows.map(w =>
-        `<div class="mole-workflow-chip" data-name="${escapeHtml(w.name)}" data-label="${escapeHtml(w.label)}" data-has-required="${w.hasRequiredParams ? '1' : '0'}" title="${escapeHtml(w.description)}"><span class="mole-workflow-chip-label">${escapeHtml(w.label)}</span></div>`
-      ).join('');
-
-      resultEl.innerHTML = `<div class="mole-workflow-hints">
-        <div class="mole-workflow-hints-title">试试快捷指令</div>
-        <div class="mole-workflow-chips">${chipsHtml}</div>
-      </div>`;
-      showResult();
+      availableWorkflows = workflows.filter(item => item.label && item.name);
+      if (availableWorkflows.length === 0) return;
+      renderWorkflowList();
     });
   };
 
@@ -4013,6 +4175,12 @@ export const initFloatBall = async () => {
     'test:search': simulateSearchResults,
   };
 
+  interface SubmitQueryOptions {
+    skipHistory?: boolean;
+    displayQuery?: string;
+    displayTitle?: string;
+  }
+
   /** 发送查询（仅处理本地测试指令，正常查询通过 session 体系） */
   const dispatchQuery = (value: string, taskId: string) => {
     const testHandler = TEST_COMMANDS[value];
@@ -4025,25 +4193,217 @@ export const initFloatBall = async () => {
     // 正常查询已在 Enter 处理器中通过 __session_create / __session_continue 发送
   };
 
-  // ---- Workflow 卡片点击事件委托 ----
-  resultEl.addEventListener('click', (e) => {
-    const chip = (e.target as HTMLElement).closest('.mole-workflow-chip') as HTMLElement | null;
-    if (!chip) return;
-    const label = chip.dataset.label || chip.dataset.name || '';
-    const hasRequired = chip.dataset.hasRequired === '1';
+  const submitQuery = (rawValue: string, options: SubmitQueryOptions = {}) => {
+    const value = rawValue.trim();
+    if (!value) return;
 
-    if (hasRequired) {
-      // 有必填参数：填入 workflow 标签 + 空格，让用户补参数
-      inputEl.value = `${label} `;
-      inputEl.focus();
-      // 清除卡片
-      const hints = resultEl.querySelector('.mole-workflow-hints');
-      if (hints) hints.remove();
-      if (!resultEl.innerHTML.trim()) hideResult();
-    } else {
-      // 无必填参数：填入标签后自动提交
-      inputEl.value = label;
-      inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    if (currentTask?.status === 'running') return;
+
+    const displayQuery = String(options.displayQuery || value).trim() || value;
+    const displayTitle = String(options.displayTitle || displayQuery).trim() || displayQuery;
+
+    if (!options.skipHistory) {
+      pushInputHistory(displayQuery);
+      resetInputHistoryCursor();
+    }
+
+    inputEl.value = '';
+
+    const isTestCommand = value in TEST_COMMANDS || value.startsWith('test:chain:');
+
+    if (!currentTask || (currentTask.status === 'error')) {
+      if (isTestCommand) {
+        const taskId = Date.now().toString();
+
+        resetReplayCursor();
+        clearReplayCache();
+        currentTask = {
+          id: taskId,
+          query: displayQuery,
+          title: buildTaskTitle(displayTitle),
+          status: 'running',
+          resultHtml: '',
+          callStack: [],
+          errorMsg: '',
+          lastAIText: '',
+          agentPhase: 'plan',
+          agentRound: 0,
+          failureCode: '',
+          startedAt: Date.now(),
+          endedAt: null,
+          durationMs: null,
+          taskKind: 'regular',
+        };
+        hideResult();
+        updateInputUI();
+        dispatchQuery(value, taskId);
+      } else {
+        const tempId = Date.now().toString();
+
+        resetReplayCursor();
+        clearReplayCache();
+        currentTask = {
+          id: tempId,
+          query: displayQuery,
+          title: buildTaskTitle(displayTitle),
+          status: 'running',
+          resultHtml: '',
+          callStack: [],
+          errorMsg: '',
+          lastAIText: '',
+          agentPhase: 'plan',
+          agentRound: 0,
+          failureCode: '',
+          startedAt: Date.now(),
+          endedAt: null,
+          durationMs: null,
+          taskKind: 'regular',
+        };
+        hideResult();
+        updateInputUI();
+
+        Channel.send('__session_create', { query: value }, (response: any) => {
+          if (response?.sessionId && currentTask && currentTask.id === tempId) {
+            currentTask.id = response.sessionId;
+            if (typeof response.summary === 'string' && response.summary.trim()) {
+              currentTask.title = buildTaskTitle(response.summary);
+            }
+            return;
+          }
+          if (currentTask && currentTask.id === tempId && response?.accepted === false) {
+            const message = typeof response?.message === 'string' && response.message.trim()
+              ? response.message.trim()
+              : '创建会话失败';
+            currentTask.status = 'error';
+            currentTask.errorMsg = message;
+            currentTask.failureCode = typeof response?.code === 'string' ? response.code : currentTask.failureCode;
+            if (currentTask.failureCode === 'E_AUTH_REQUIRED' || message.includes('请先登录')) {
+              appendToResult(`<div class="mole-error">\u26A0 请在 Options 页面配置 API Key</div>`);
+              updateInputUI();
+              saveSnapshot();
+              return;
+            }
+            appendToResult(`<div class="mole-error">\u26A0 ${escapeHtml(message)}</div>`);
+            updateInputUI();
+            saveSnapshot();
+          }
+        });
+      }
+      return;
+    }
+
+    const previousQuery = currentTask.query;
+
+    resetReplayCursor();
+    currentTask.query = displayQuery;
+    currentTask.title = buildTaskTitle(displayTitle);
+    currentTask.status = 'running';
+    currentTask.callStack = [];
+    currentTask.lastAIText = '';
+    currentTask.agentPhase = 'plan';
+    currentTask.agentRound = 0;
+    currentTask.failureCode = '';
+    currentTask.errorMsg = '';
+    currentTask.startedAt = Date.now();
+    currentTask.endedAt = null;
+    currentTask.durationMs = null;
+
+    archiveCurrentRoundView(previousQuery);
+
+    showResult();
+    resultEl.scrollTop = resultEl.scrollHeight;
+    saveSnapshot();
+
+    updateInputUI();
+
+    if (isTestCommand) {
+      dispatchQuery(value, currentTask.id);
+      return;
+    }
+
+    const expectedSessionId = currentTask.id;
+    const expectedRunId = currentTask.activeRunId || undefined;
+    Channel.send(
+      '__session_continue',
+      { sessionId: expectedSessionId, expectedSessionId, expectedRunId, query: value },
+      (response: any) => {
+        if (!currentTask) return;
+        if (response?.accepted === false) {
+          if (typeof response.actualSessionId === 'string') {
+            currentTask.id = response.actualSessionId;
+          }
+          if (typeof response.actualRunId === 'string' || response.actualRunId === null) {
+            currentTask.activeRunId = response.actualRunId;
+          }
+          const message = typeof response?.message === 'string' && response.message.trim()
+            ? response.message.trim()
+            : '继续对话失败';
+          currentTask.status = 'error';
+          currentTask.errorMsg = message;
+          currentTask.failureCode = typeof response?.code === 'string' ? response.code : currentTask.failureCode;
+          if (currentTask.failureCode === 'E_AUTH_REQUIRED' || message.includes('请先登录')) {
+            appendToResult(`<div class="mole-error">\u26A0 请在 Options 页面配置 API Key</div>`);
+            updateInputUI();
+            saveSnapshot();
+            return;
+          }
+          appendToResult(`<div class="mole-error">\u26A0 ${escapeHtml(message)}</div>`);
+          updateInputUI();
+          saveSnapshot();
+        } else if (response?.accepted === true && typeof response.sessionId === 'string') {
+          currentTask.id = response.sessionId;
+          if (typeof response.runId === 'string' || response.runId === null) {
+            currentTask.activeRunId = response.runId;
+          }
+          if (typeof response?.message === 'string' && response.message.trim()) {
+            showPillNotice(response.message.trim(), 'info');
+          }
+        }
+      },
+    );
+  };
+
+  const launchWorkflow = (workflow: AvailableWorkflowItem, params: Record<string, unknown> = {}) => {
+    const query = buildWorkflowShortcutQuery(workflow, params);
+    submitQuery(query, {
+      skipHistory: true,
+      displayQuery: summarizeWorkflowParams(workflow, params),
+      displayTitle: workflow.label,
+    });
+  };
+
+  // ---- Workflow 列表点击事件委托 ----
+  resultEl.addEventListener('click', (e) => {
+    const workflowBtn = (e.target as HTMLElement).closest('.mole-workflow-item') as HTMLElement | null;
+    if (workflowBtn) {
+      const workflowKey = workflowBtn.dataset.workflowKey || '';
+      const workflow = availableWorkflows.find(item => getWorkflowFormKey(item) === workflowKey);
+      if (!workflow) return;
+      if (workflow.hasRequiredParams) {
+        renderWorkflowForm(workflow);
+      } else {
+        launchWorkflow(workflow);
+      }
+      return;
+    }
+
+    const backBtn = (e.target as HTMLElement).closest('.mole-workflow-back-btn') as HTMLElement | null;
+    if (backBtn) {
+      renderWorkflowList();
+      return;
+    }
+
+    const runBtn = (e.target as HTMLElement).closest('.mole-workflow-run-btn') as HTMLElement | null;
+    if (runBtn) {
+      const workflowKey = runBtn.dataset.workflowKey || '';
+      const workflow = availableWorkflows.find(item => getWorkflowFormKey(item) === workflowKey);
+      if (!workflow) return;
+      const collected = collectWorkflowParams(workflow);
+      if (collected.error) {
+        showPillNotice(collected.error, 'error');
+        return;
+      }
+      launchWorkflow(workflow, collected.params || {});
     }
   });
 
@@ -4055,6 +4415,7 @@ export const initFloatBall = async () => {
     const hints = resultEl.querySelector('.mole-workflow-hints');
     if (hints) {
       hints.remove();
+      availableWorkflows = [];
       if (!resultEl.innerHTML.trim()) hideResult();
     }
   });
@@ -4089,179 +4450,7 @@ export const initFloatBall = async () => {
     }
 
     if (e.key === 'Enter' && !e.isComposing) {
-      const value = inputEl.value.trim();
-      if (!value) return;
-
-      // running 时不允许新输入
-      if (currentTask?.status === 'running') return;
-
-      // 记录到历史并重置游标
-      pushInputHistory(value);
-      resetInputHistoryCursor();
-
-      inputEl.value = '';
-
-      // 判断是否为本地测试指令
-      const isTestCommand = value in TEST_COMMANDS || value.startsWith('test:chain:');
-
-      if (!currentTask || (currentTask.status === 'error')) {
-        // ---- 新任务 ----
-        if (isTestCommand) {
-          // 测试指令：本地生成 taskId，走旧路径
-          const taskId = Date.now().toString();
-      
-          resetReplayCursor();
-          clearReplayCache();
-          currentTask = {
-            id: taskId,
-            query: value,
-            title: buildTaskTitle(value),
-            status: 'running',
-            resultHtml: '',
-            callStack: [],
-            errorMsg: '',
-            lastAIText: '',
-            agentPhase: 'plan',
-            agentRound: 0,
-            failureCode: '',
-            startedAt: Date.now(),
-            endedAt: null,
-            durationMs: null,
-            taskKind: 'regular',
-          };
-          hideResult();
-          updateInputUI();
-          dispatchQuery(value, taskId);
-        } else {
-          // 正常查询：通过 session 体系，先创建本地任务占位
-          const tempId = Date.now().toString();
-      
-          resetReplayCursor();
-          clearReplayCache();
-          currentTask = {
-            id: tempId,
-            query: value,
-            title: buildTaskTitle(value),
-            status: 'running',
-            resultHtml: '',
-            callStack: [],
-            errorMsg: '',
-            lastAIText: '',
-            agentPhase: 'plan',
-            agentRound: 0,
-            failureCode: '',
-            startedAt: Date.now(),
-            endedAt: null,
-            durationMs: null,
-            taskKind: 'regular',
-          };
-          hideResult();
-          updateInputUI();
-
-          // 请求 background 创建会话
-          Channel.send('__session_create', { query: value }, (response: any) => {
-            if (response?.sessionId && currentTask && currentTask.id === tempId) {
-              // 更新为 background 分配的 sessionId
-              currentTask.id = response.sessionId;
-              if (typeof response.summary === 'string' && response.summary.trim()) {
-                currentTask.title = buildTaskTitle(response.summary);
-              }
-              return;
-            }
-            if (currentTask && currentTask.id === tempId && response?.accepted === false) {
-              const message = typeof response?.message === 'string' && response.message.trim()
-                ? response.message.trim()
-                : '创建会话失败';
-              currentTask.status = 'error';
-              currentTask.errorMsg = message;
-              currentTask.failureCode = typeof response?.code === 'string' ? response.code : currentTask.failureCode;
-              // API Key 未配置：提示用户前往 Options 页面
-              if (currentTask.failureCode === 'E_AUTH_REQUIRED' || message.includes('请先登录')) {
-                appendToResult(`<div class="mole-error">\u26A0 请在 Options 页面配置 API Key</div>`);
-                updateInputUI();
-                saveSnapshot();
-                return;
-              }
-              appendToResult(`<div class="mole-error">\u26A0 ${escapeHtml(message)}</div>`);
-              updateInputUI();
-              saveSnapshot();
-            }
-          });
-        }
-      } else {
-        // ---- 继续对话 ----
-        const previousQuery = currentTask.query;
-    
-        resetReplayCursor();
-        currentTask.query = value;
-        currentTask.title = buildTaskTitle(value);
-        currentTask.status = 'running';
-        currentTask.callStack = [];
-        currentTask.lastAIText = '';
-        currentTask.agentPhase = 'plan';
-        currentTask.agentRound = 0;
-        currentTask.failureCode = '';
-        currentTask.errorMsg = '';
-        currentTask.startedAt = Date.now();
-        currentTask.endedAt = null;
-        currentTask.durationMs = null;
-
-        archiveCurrentRoundView(previousQuery);
-
-        showResult();
-        resultEl.scrollTop = resultEl.scrollHeight;
-        saveSnapshot();
-
-        updateInputUI();
-
-        if (isTestCommand) {
-          // 测试指令走旧路径
-          dispatchQuery(value, currentTask.id);
-        } else {
-          // 通过 session 体系继续对话
-          const expectedSessionId = currentTask.id;
-          const expectedRunId = currentTask.activeRunId || undefined;
-          Channel.send(
-            '__session_continue',
-            { sessionId: expectedSessionId, expectedSessionId, expectedRunId, query: value },
-            (response: any) => {
-              if (!currentTask) return;
-              if (response?.accepted === false) {
-                if (typeof response.actualSessionId === 'string') {
-                  currentTask.id = response.actualSessionId;
-                }
-                if (typeof response.actualRunId === 'string' || response.actualRunId === null) {
-                  currentTask.activeRunId = response.actualRunId;
-                }
-                const message = typeof response?.message === 'string' && response.message.trim()
-                  ? response.message.trim()
-                  : '继续对话失败';
-                currentTask.status = 'error';
-                currentTask.errorMsg = message;
-                currentTask.failureCode = typeof response?.code === 'string' ? response.code : currentTask.failureCode;
-                // API Key 未配置：提示用户前往 Options 页面
-                if (currentTask.failureCode === 'E_AUTH_REQUIRED' || message.includes('请先登录')) {
-                  appendToResult(`<div class="mole-error">\u26A0 请在 Options 页面配置 API Key</div>`);
-                  updateInputUI();
-                  saveSnapshot();
-                  return;
-                }
-                appendToResult(`<div class="mole-error">\u26A0 ${escapeHtml(message)}</div>`);
-                updateInputUI();
-                saveSnapshot();
-              } else if (response?.accepted === true && typeof response.sessionId === 'string') {
-                currentTask.id = response.sessionId;
-                if (typeof response.runId === 'string' || response.runId === null) {
-                  currentTask.activeRunId = response.runId;
-                }
-                if (typeof response?.message === 'string' && response.message.trim()) {
-                  showPillNotice(response.message.trim(), 'info');
-                }
-              }
-            },
-          );
-        }
-      }
+      submitQuery(inputEl.value);
     }
   });
 

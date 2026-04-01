@@ -4,6 +4,7 @@
 
 import type { SessionOpQueueSnapshot } from '../../../ai/types';
 import type { Side, RecentCompletedTaskItem } from '../constants';
+import type { WorkflowRunMeta } from '../workflow-types';
 
 // ============ 任务状态 ============
 
@@ -28,6 +29,7 @@ export interface TaskItem {
   opQueue?: SessionOpQueueSnapshot;
   /** 会话是否有可恢复的上下文 */
   hasContext?: boolean;
+  workflowRun?: WorkflowRunMeta;
 }
 
 export interface TabTakeoverState {

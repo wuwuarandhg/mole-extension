@@ -1,7 +1,17 @@
-import type { FunctionDefinition, FunctionResult } from './types';
+import type { FunctionDefinition, FunctionResult, ToolExecutionContext } from './types';
 import { upsertUserWorkflow as upsertOldUserWorkflow } from './site-workflow-registry';
 import { upsertUserWorkflow as upsertSkillUserWorkflow } from './skill-registry';
 import { getBuiltinFunction } from './registry';
+
+const getTabUrl = async (tabId?: number): Promise<string | undefined> => {
+  if (typeof chrome === 'undefined' || !chrome.tabs || !tabId || !Number.isFinite(tabId)) return undefined;
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return tab?.url || undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 // 保存用户确认的工作流
 export const saveWorkflowFunction: FunctionDefinition = {
@@ -19,7 +29,7 @@ export const saveWorkflowFunction: FunctionDefinition = {
     },
     required: ['workflow_json'],
   },
-  execute: async (params: Record<string, any>): Promise<FunctionResult> => {
+  execute: async (params: Record<string, any>, context?: ToolExecutionContext): Promise<FunctionResult> => {
     // 解析 JSON 字符串
     let workflow: any;
     try {
@@ -60,8 +70,9 @@ export const saveWorkflowFunction: FunctionDefinition = {
       createdAt: workflow.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
+    const tabUrl = await getTabUrl(context?.tabId);
     // 保存到新 Skill 注册表
-    const skillResult = await upsertSkillUserWorkflow(spec);
+    const skillResult = await upsertSkillUserWorkflow(spec, tabUrl);
     // 同时保存到旧注册表（向后兼容）
     await upsertOldUserWorkflow(spec);
     return { success: skillResult.success, data: skillResult.message, error: skillResult.success ? undefined : skillResult.message };

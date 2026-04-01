@@ -21,8 +21,7 @@ import {
 } from './functions/remote-workflow';
 import { listSiteWorkflows, reloadRegistryFromStore } from './functions/site-workflow-registry';
 import { matchWorkflows } from './functions/site-workflow-matcher';
-import { listAllSkills } from './functions/skill-registry';
-import { matchSkills } from './functions/skill-matcher';
+import { listMatchedWorkflowsByUrl } from './functions/skill-registry';
 import { setupRecorderHandlers } from './background/workflow-recorder';
 import { setupBgTasksHandlers, broadcastBgTasksChanged } from './background/bg-tasks-manager';
 import { handleChat } from './ai/orchestrator';
@@ -1610,14 +1609,16 @@ async function runSessionShortcutTask(
     const shortcut = await parseShortcut(normalizedQuery);
     if (!shortcut) return false;
 
-    const { funcName, arg } = shortcut;
+    const { funcName, arg, params: shortcutParams } = shortcut;
     console.log(`[Mole] 快捷指令(session), func: ${funcName}, arg: ${arg}`);
     pushEvent({ type: 'thinking', content: `正在执行 ${funcName}...` });
 
     const tools = await mcpClient.listTools();
     const toolDef = tools.find(t => t.name === funcName);
     const requiredParam = toolDef?.inputSchema?.required?.[0] || 'keyword';
-    const params = { [requiredParam]: arg };
+    const params = shortcutParams && typeof shortcutParams === 'object'
+        ? { [requiredParam]: arg, params: shortcutParams }
+        : { [requiredParam]: arg };
 
     const emitShortcutDone = (text: string) => {
         const message = text.trim() || '已完成处理。';
@@ -3803,34 +3804,83 @@ Channel.on('__session_replay_request', (data, sender, sendResponse) => {
 
 // ============ 站点工作流匹配（供 content script 查询当前页面可用的 workflow） ============
 
+const HIGH_RISK_NOTE_PATTERNS = [
+    /删除|提交|支付|下单|购买|发布|发送|确认|登录|注册|授权|转账|提现/i,
+    /delete|submit|purchase|pay|order|post|send|confirm|login|register|authorize|transfer|withdraw/i,
+];
+const SAFE_CDP_INPUT_ACTIONS = new Set([
+    'wait_for_element',
+    'wait_for_text',
+    'wait_for_url',
+    'get_value',
+    'get_text',
+    'get_html',
+    'get_attribute',
+    'screenshot',
+]);
+
+const classifyWorkflowRisk = (plan: unknown): { isHighRisk: boolean; riskReason?: string } => {
+    if (!plan || typeof plan !== 'object') return { isHighRisk: false };
+    const steps = Array.isArray((plan as Record<string, unknown>).steps)
+        ? (plan as Record<string, unknown>).steps as Array<Record<string, unknown>>
+        : [];
+    for (const step of steps) {
+        const action = String(step?.action || '').trim().toLowerCase();
+        const note = String(step?.note || '').trim();
+        const params = step?.params && typeof step.params === 'object'
+            ? step.params as Record<string, unknown>
+            : {};
+        const subAction = String(params.action || '').trim().toLowerCase();
+
+        if ((action === 'cdp_input' || action === 'page_action') && subAction && !SAFE_CDP_INPUT_ACTIONS.has(subAction)) {
+            return {
+                isHighRisk: true,
+                riskReason: note || `包含页面交互动作：${subAction}`,
+            };
+        }
+
+        if (action === 'cdp_dialog' || action === 'cdp_network') {
+            return {
+                isHighRisk: true,
+                riskReason: note || `包含高风险动作：${action}`,
+            };
+        }
+
+        if (HIGH_RISK_NOTE_PATTERNS.some(pattern => pattern.test(note))) {
+            return {
+                isHighRisk: true,
+                riskReason: note,
+            };
+        }
+    }
+    return { isHighRisk: false };
+};
+
 Channel.on('__site_workflows_match', (data, _sender, sendResponse) => {
     void (async () => {
         const url = String(data?.url || '').trim();
 
-        // 优先从新 Skill 注册表查询
-        const allSkills = await listAllSkills();
-        const matched = matchSkills(url, allSkills);
-        // 域级 Skill 的 workflow 展示为卡片提示（全局 Skill 不展示，避免卡片过多）
-        const domainSkills = matched.filter(s => s.scope === 'domain');
-        const workflows = domainSkills.flatMap(s =>
-            s.workflows.map(w => ({
-                name: w.name,
-                label: w.label,
-                description: w.description,
-                skillLabel: s.label,
-                hasRequiredParams: Array.isArray(w.parameters?.required) && w.parameters.required.length > 0,
-            }))
-        );
+        const workflows = await listMatchedWorkflowsByUrl(url);
 
         if (workflows.length > 0) {
-            // 按 label 去重
-            const seenLabels = new Set<string>();
-            const deduped = workflows.filter(w => {
-                if (seenLabels.has(w.label)) return false;
-                seenLabels.add(w.label);
-                return true;
+            sendResponse?.({
+                success: true,
+                workflows: workflows.map(item => ({
+                    ...classifyWorkflowRisk(item.workflow.plan),
+                    engine: 'skill',
+                    workflowId: item.workflowId,
+                    name: item.workflowName,
+                    label: item.label,
+                    description: item.description,
+                    skillName: item.skillName,
+                    skillLabel: item.skillLabel,
+                    scope: item.scope,
+                    source: item.source,
+                    hasRequiredParams: item.hasRequiredParams,
+                    requiredParams: item.requiredParams,
+                    parameters: item.parameters,
+                })),
             });
-            sendResponse?.({ success: true, workflows: deduped });
             return;
         }
 
@@ -3848,9 +3898,13 @@ Channel.on('__site_workflows_match', (data, _sender, sendResponse) => {
         sendResponse?.({
             success: true,
             workflows: deduped.map(w => ({
+                isHighRisk: false,
+                engine: 'site_workflow',
                 name: w.name,
                 label: w.label,
                 description: w.description,
+                requiredParams: Array.isArray(w.parameters?.required) ? w.parameters.required : [],
+                parameters: w.parameters || { type: 'object', properties: {} },
                 hasRequiredParams: Array.isArray(w.parameters?.required) && w.parameters.required.length > 0,
             })),
         });
@@ -4173,17 +4227,35 @@ Channel.on('__test_chain', (data, sender) => {
  * 例如 "baidu_search:机械键盘" → { funcName: 'baidu_search', arg: '机械键盘' }
  * 通过 MCP Client 获取可用工具列表进行验证
  */
-async function parseShortcut(input: string): Promise<{ funcName: string; arg: string } | null> {
+async function parseShortcut(input: string): Promise<{ funcName: string; arg: string; params?: Record<string, unknown> } | null> {
     const match = input.match(/^(\w+):(.+)$/);
     if (!match) return null;
     const funcName = match[1];
-    const arg = match[2].trim();
+    let arg = match[2].trim();
     if (!arg) return null;
     // 通过 MCP Client 获取工具列表，确认函数已注册
     const tools = await mcpClient.listTools();
     const exists = tools.some(t => t.name === funcName);
     if (!exists) return null;
-    return { funcName, arg };
+
+    let params: Record<string, unknown> | undefined;
+    if ((funcName === 'skill' || funcName === 'site_workflow') && arg.includes('|')) {
+        const separatorIndex = arg.indexOf('|');
+        const rawArg = arg.slice(0, separatorIndex).trim();
+        const rawParams = arg.slice(separatorIndex + 1).trim();
+        if (!rawArg) return null;
+        arg = rawArg;
+        if (rawParams) {
+            try {
+                const parsed = JSON.parse(rawParams);
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+                params = parsed as Record<string, unknown>;
+            } catch {
+                return null;
+            }
+        }
+    }
+    return { funcName, arg, params };
 }
 
 // ============ 工具函数 ============

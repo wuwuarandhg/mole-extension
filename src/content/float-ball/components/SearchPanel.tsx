@@ -3,7 +3,7 @@
  * 包含：遮罩层 + 搜索框（InputBar + ResultView + Footer）
  */
 
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import { useMole } from '../context/useMole';
 import { useAIStream } from '../hooks/useAIStream';
 import { useSecondTick } from '../hooks/useGlobalEvents';
@@ -13,12 +13,15 @@ import { ApprovalCard } from './ApprovalCard';
 import { AskUserCard } from './AskUserCard';
 import { RecorderBar } from './RecorderBar';
 import { BgTasksPanel } from './BgTasksPanel';
+import { WorkflowPanel } from './WorkflowPanel';
 import { formatClock, formatDuration } from '../text-utils';
+import { recordWorkflowAutomationSuccess } from '../../../preferences/automation';
 
 export const SearchPanel: React.FC = () => {
   const { state, dispatch } = useMole();
   const resultRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const recordedWorkflowTaskRef = useRef('');
 
   // 注册 AI 流式事件监听
   useAIStream(resultRef);
@@ -28,6 +31,19 @@ export const SearchPanel: React.FC = () => {
 
   // 稳定的每秒计时器（仅运行中时）
   useSecondTick(isRunning === true);
+
+  useEffect(() => {
+    if (!task?.workflowRun || task.status !== 'done') return;
+    const recordKey = `${task.id}:${task.endedAt || 0}`;
+    if (recordedWorkflowTaskRef.current === recordKey) return;
+    recordedWorkflowTaskRef.current = recordKey;
+    void recordWorkflowAutomationSuccess(
+      window.location.hostname,
+      task.workflowRun.workflowKey,
+      task.workflowRun.workflowLabel,
+      task.workflowRun.params,
+    );
+  }, [task]);
 
   // 搜索框状态 class
   const boxState = !task ? 'state-idle'
@@ -76,6 +92,7 @@ export const SearchPanel: React.FC = () => {
       <div className={`mole-searchbox ${boxState}`}>
         <InputBar resultRef={resultRef} />
         <div className="mole-divider" />
+        {!task && <WorkflowPanel />}
         <ResultView />
         {/* 审批卡片（独立于 ResultView，不依赖 currentTask） */}
         {state.approvalRequest && (

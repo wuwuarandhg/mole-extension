@@ -5,10 +5,11 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Button, Form, Input, Modal, Space, Typography, App } from 'antd';
+import { Button, Form, Input, Modal, Space, Typography, App, Switch } from 'antd';
 import { CheckCircleOutlined } from '@ant-design/icons';
 import { getAISettings, saveAISettings } from '../../ai/llm-client';
 import { OptionsPageLayout, OptionsSectionCard } from '../components/PageLayout';
+import { getAutomationPreferences, saveAutomationPreferences } from '../../preferences/automation';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -23,6 +24,7 @@ export function LLMSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [autoWorkflowRunning, setAutoWorkflowRunning] = useState(false);
   const endpoint = Form.useWatch('endpoint', form);
   const apiKey = Form.useWatch('apiKey', form);
   const model = Form.useWatch('model', form);
@@ -30,12 +32,16 @@ export function LLMSettingsPage() {
   /* 加载已保存的设置，判断是否需要引导 */
   useEffect(() => {
     const load = async () => {
-      const settings = await getAISettings();
+      const [settings, automation] = await Promise.all([
+        getAISettings(),
+        getAutomationPreferences(),
+      ]);
       form.setFieldsValue({
         endpoint: settings.endpoint || '',
         apiKey: settings.apiKey || '',
         model: settings.model || 'gpt-5.4',
       });
+      setAutoWorkflowRunning(automation.autoCompleteWorkflowOnClick === true);
       if (!isConfigured(settings)) {
         setupForm.setFieldsValue({
           endpoint: '',
@@ -88,6 +94,18 @@ export function LLMSettingsPage() {
       await doSave(values, true);
     } catch {
       /* 表单校验不通过，忽略 */
+    }
+  };
+
+  const handleAutomationToggle = async (checked: boolean) => {
+    try {
+      const next = await saveAutomationPreferences({
+        autoCompleteWorkflowOnClick: checked,
+      });
+      setAutoWorkflowRunning(next.autoCompleteWorkflowOnClick);
+      void message.success(checked ? '已开启点击工作流自动完成' : '已关闭点击工作流自动完成');
+    } catch (err: any) {
+      void message.error(err?.message || '保存自动化设置失败');
     }
   };
 
@@ -168,6 +186,21 @@ export function LLMSettingsPage() {
               </Button>
             </Form.Item>
           </Form>
+        </OptionsSectionCard>
+
+        <OptionsSectionCard
+          title="自动化行为"
+          description="控制工作流点击后的默认执行方式。开启后，Mole 会先补全参数，再直接运行；遇到高风险动作或缺少关键参数时会回退到手动确认。"
+        >
+          <div className="options-form-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>点击工作流自动完成</div>
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                自动选择当前页上下文参数并尽量直接执行，保留高风险拦截。
+              </Text>
+            </div>
+            <Switch checked={autoWorkflowRunning} onChange={(checked) => void handleAutomationToggle(checked)} />
+          </div>
         </OptionsSectionCard>
       </OptionsPageLayout>
 

@@ -14,6 +14,7 @@ import {
   clipRuntimeText,
   formatDuration,
 } from '../text-utils';
+import type { WorkflowRunMeta } from '../workflow-types';
 
 /** 判断滚动容器是否在底部附近（阈值 60px） */
 const isNearBottom = (el: HTMLElement, threshold = 60): boolean => {
@@ -110,6 +111,32 @@ const AgentStatePanel: React.FC<{
           </div>
           {children}
         </>
+      )}
+    </div>
+  );
+};
+
+const WorkflowRunBanner: React.FC<{ workflowRun: WorkflowRunMeta }> = ({ workflowRun }) => {
+  const paramsSummary = Object.entries(workflowRun.params)
+    .slice(0, 3)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join('，');
+
+  return (
+    <div className="mole-workflow-run-banner">
+      <div className="mole-workflow-run-banner-head">
+        <span className="mole-workflow-run-banner-title">{workflowRun.workflowLabel}</span>
+        <span className={`mole-workflow-pill${workflowRun.mode === 'auto' ? ' ready' : ''}`}>
+          {workflowRun.mode === 'auto' ? '自动运行' : '手动运行'}
+        </span>
+      </div>
+      <div className="mole-workflow-run-banner-meta">
+        {paramsSummary || '未传额外参数'}
+      </div>
+      {workflowRun.fallbackReason && (
+        <div className="mole-workflow-run-banner-note">
+          自动模式未直跑：{workflowRun.fallbackReason}
+        </div>
       )}
     </div>
   );
@@ -237,6 +264,10 @@ export const ResultView: React.FC = () => {
 
   return (
     <div className="mole-result visible" ref={resultRef} onScroll={handleScroll}>
+      {task.workflowRun && (
+        <WorkflowRunBanner workflowRun={task.workflowRun} />
+      )}
+
       {/* 进展面板 */}
       {(isRunning || isFinished) && (
         <AgentStatePanel

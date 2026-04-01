@@ -71,6 +71,22 @@ interface SourcesStoreShape {
   sources: SkillManifestSource[];
 }
 
+export interface ResolvedWorkflowEntry {
+  workflowId: string;
+  skillName: string;
+  skillLabel: string;
+  workflowName: string;
+  label: string;
+  description: string;
+  parameters: Record<string, any>;
+  requiredParams: string[];
+  hasRequiredParams: boolean;
+  scope: SkillSpec['scope'];
+  source: SkillSpec['source'];
+  urlPatterns: string[];
+  workflow: WorkflowEntry;
+}
+
 const chromeStorageGet = async (key: string): Promise<any> => {
   if (!hasChromeStorage()) return null;
   const result = await new Promise<Record<string, unknown>>(resolve => {
@@ -119,6 +135,91 @@ const persistSources = async (sources: SkillManifestSource[]): Promise<void> => 
     sources,
   };
   await chromeStorageSet(SOURCES_KEY, payload);
+};
+
+const WORKFLOW_ID_DELIMITER = '::';
+const SKILL_SOURCE_PRIORITY: Record<SkillSpec['source'], number> = {
+  user: 0,
+  remote: 1,
+  builtin: 2,
+};
+
+export const buildWorkflowId = (skillName: string, workflowName: string): string =>
+  `${encodeURIComponent(skillName)}${WORKFLOW_ID_DELIMITER}${encodeURIComponent(workflowName)}`;
+
+const parseWorkflowId = (workflowId: string): { skillName: string; workflowName: string } | null => {
+  const normalized = String(workflowId || '').trim();
+  if (!normalized) return null;
+  const delimiterIndex = normalized.indexOf(WORKFLOW_ID_DELIMITER);
+  if (delimiterIndex <= 0) return null;
+  const rawSkillName = normalized.slice(0, delimiterIndex);
+  const rawWorkflowName = normalized.slice(delimiterIndex + WORKFLOW_ID_DELIMITER.length);
+  if (!rawSkillName || !rawWorkflowName) return null;
+  try {
+    return {
+      skillName: decodeURIComponent(rawSkillName),
+      workflowName: decodeURIComponent(rawWorkflowName),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const sortSkillsForWorkflowResolution = (skills: SkillSpec[]): SkillSpec[] => {
+  return [...skills].sort((a, b) => {
+    if (a.scope !== b.scope) return a.scope === 'domain' ? -1 : 1;
+    const sourceDiff = (SKILL_SOURCE_PRIORITY[a.source] ?? 99) - (SKILL_SOURCE_PRIORITY[b.source] ?? 99);
+    if (sourceDiff !== 0) return sourceDiff;
+    return a.name.localeCompare(b.name);
+  });
+};
+
+const toResolvedWorkflowEntry = (skill: SkillSpec, workflow: WorkflowEntry): ResolvedWorkflowEntry => {
+  const requiredParams = Array.isArray(workflow.parameters?.required)
+    ? workflow.parameters.required
+        .map((item: unknown) => String(item || '').trim())
+        .filter(Boolean)
+    : [];
+  return {
+    workflowId: buildWorkflowId(skill.name, workflow.name),
+    skillName: skill.name,
+    skillLabel: skill.label,
+    workflowName: workflow.name,
+    label: workflow.label,
+    description: workflow.description,
+    parameters: workflow.parameters || { type: 'object', properties: {} },
+    requiredParams,
+    hasRequiredParams: requiredParams.length > 0,
+    scope: skill.scope,
+    source: skill.source,
+    urlPatterns: skill.url_patterns,
+    workflow,
+  };
+};
+
+const collectSkills = (): SkillSpec[] => [...domainSkillCache.values(), ...globalSkillCache.values()];
+
+const findWorkflowByReference = (skills: SkillSpec[], reference: string): ResolvedWorkflowEntry | null => {
+  const normalizedReference = String(reference || '').trim();
+  if (!normalizedReference) return null;
+
+  const parsedId = parseWorkflowId(normalizedReference);
+  if (parsedId) {
+    const targetSkill = skills.find(skill => skill.enabled && skill.name === parsedId.skillName);
+    if (!targetSkill) return null;
+    const workflow = targetSkill.workflows.find(item => item.name === parsedId.workflowName);
+    return workflow ? toResolvedWorkflowEntry(targetSkill, workflow) : null;
+  }
+
+  for (const skill of skills) {
+    if (!skill.enabled) continue;
+    const workflow = skill.workflows.find(item =>
+      item.name === normalizedReference || item.label === normalizedReference,
+    );
+    if (workflow) return toResolvedWorkflowEntry(skill, workflow);
+  }
+
+  return null;
 };
 
 // ============ 校验 ============
@@ -546,6 +647,30 @@ export const matchSkillsByUrl = async (url: string): Promise<SkillSpec[]> => {
   return matchSkills(url, all);
 };
 
+/** 列出当前 URL 可用的 workflow（域级优先，全局兜底） */
+export const listMatchedWorkflowsByUrl = async (url: string): Promise<ResolvedWorkflowEntry[]> => {
+  await ensureSkillRegistryReady();
+  const matchedSkills = sortSkillsForWorkflowResolution(matchSkills(url, collectSkills()));
+  return matchedSkills.flatMap(skill => skill.workflows.map(workflow => toResolvedWorkflowEntry(skill, workflow)));
+};
+
+/** 解析 workflow 引用（支持 workflowId、workflow.name、workflow.label） */
+export const resolveWorkflowReference = async (
+  reference: string,
+  tabUrl?: string,
+): Promise<ResolvedWorkflowEntry | null> => {
+  await ensureSkillRegistryReady();
+
+  if (tabUrl) {
+    const matchedSkills = sortSkillsForWorkflowResolution(matchSkills(tabUrl, collectSkills()));
+    const matchedResult = findWorkflowByReference(matchedSkills, reference);
+    if (matchedResult) return matchedResult;
+  }
+
+  const allSkills = sortSkillsForWorkflowResolution(collectSkills());
+  return findWorkflowByReference(allSkills, reference);
+};
+
 /** 根据 workflow 名称在所有 Skill 中查找（常驻运行器用） */
 export const getWorkflowByName = async (workflowName: string): Promise<WorkflowEntry | null> => {
   await ensureSkillRegistryReady();
@@ -609,6 +734,11 @@ export const upsertUserWorkflow = async (
   workflowRaw: unknown,
   tabUrl?: string,
 ): Promise<{ success: boolean; message: string }> => {
+  const rawUrlPatterns = Array.isArray((workflowRaw as Record<string, unknown> | null)?.url_patterns)
+    ? ((workflowRaw as Record<string, unknown>).url_patterns as unknown[])
+        .map(item => String(item || '').trim())
+        .filter(Boolean)
+    : [];
   const wf = validateWorkflow(workflowRaw);
   if (!wf) return { success: false, message: 'workflow 定义不合法' };
 
@@ -624,7 +754,9 @@ export const upsertUserWorkflow = async (
   }
 
   // 没有匹配的 Skill → 创建新的域级 user Skill
-  const urlPatterns = tabUrl ? [extractDomainPattern(tabUrl)] : ['*://*/*'];
+  const urlPatterns = rawUrlPatterns.length > 0
+    ? rawUrlPatterns
+    : (tabUrl ? [extractDomainPattern(tabUrl)] : ['*://*/*']);
   const skillName = `user-${wf.name.replace(/\s+/g, '-')}`;
   const skill: SkillSpec = {
     name: skillName,

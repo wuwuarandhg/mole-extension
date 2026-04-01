@@ -7,36 +7,18 @@ import React, { useRef, useCallback, useEffect } from 'react';
 import Channel from '../../../lib/channel';
 import { useMole } from '../context/useMole';
 import { buildTaskTitle } from '../text-utils';
-import type { TaskItem } from '../context/types';
+import { submitNewTask as submitTask } from '../task-submit';
 
 interface InputBarProps {
   resultRef: React.RefObject<HTMLDivElement | null>;
 }
-
-/** 创建新任务的默认状态 */
-const createNewTask = (query: string, id?: string): TaskItem => ({
-  id: id || Date.now().toString(),
-  query,
-  title: buildTaskTitle(query),
-  status: 'running',
-  resultHtml: '',
-  callStack: [],
-  errorMsg: '',
-  lastAIText: '',
-  agentPhase: 'plan',
-  agentRound: 0,
-  failureCode: '',
-  startedAt: Date.now(),
-  endedAt: null,
-  durationMs: null,
-  taskKind: 'regular',
-});
 
 export const InputBar: React.FC<InputBarProps> = ({ resultRef }) => {
   const { state, dispatch } = useMole();
   const inputRef = useRef<HTMLInputElement>(null);
   const task = state.currentTask;
   const isRunning = task?.status === 'running';
+  void resultRef;
 
   // 面板打开时自动聚焦
   useEffect(() => {
@@ -50,32 +32,9 @@ export const InputBar: React.FC<InputBarProps> = ({ resultRef }) => {
 
   // 提交新任务
   const submitNewTask = useCallback((value: string) => {
-    const tempTask = createNewTask(value);
-    dispatch({ type: 'SET_TASK', payload: tempTask });
-    dispatch({ type: 'PUSH_INPUT_HISTORY', payload: value });
-
-    Channel.send('__session_create', { query: value }, (response: any) => {
-      if (response?.sessionId) {
-        dispatch({
-          type: 'UPDATE_TASK',
-          payload: {
-            id: response.sessionId,
-            ...(response.summary ? { title: buildTaskTitle(response.summary) } : {}),
-          },
-        });
-        return;
-      }
-      if (response?.accepted === false) {
-        const message = response?.message?.trim() || '创建会话失败';
-        dispatch({
-          type: 'UPDATE_TASK',
-          payload: {
-            status: 'error',
-            errorMsg: message,
-            failureCode: response?.code || '',
-          },
-        });
-      }
+    submitTask(dispatch, {
+      actualQuery: value,
+      historyValue: value,
     });
   }, [dispatch]);
 

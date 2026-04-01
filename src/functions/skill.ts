@@ -12,10 +12,15 @@
 import type { FunctionDefinition, FunctionResult, ToolExecutionContext } from './types';
 import type { ToolSchema } from '../ai/types';
 import type { SkillSpec, WorkflowEntry } from './skill-types';
-import { matchSkillsByUrl, listAllSkills, getSkill, ensureSkillRegistryReady } from './skill-registry';
+import {
+  buildWorkflowId,
+  matchSkillsByUrl,
+  listAllSkills,
+  getSkill,
+  ensureSkillRegistryReady,
+  resolveWorkflowReference,
+} from './skill-registry';
 import { executeDebugRemotePlan } from './remote-workflow';
-
-const MAX_WORKFLOWS_IN_SCHEMA = 15;
 
 /** guide 条目（传给系统提示词，仅域级 Skill） */
 export interface SkillGuideEntry {
@@ -60,6 +65,16 @@ const buildWorkflowDescription = (wf: WorkflowEntry): string => {
     if (parts.length > 0) paramHint = ` | 参数: ${parts.join(', ')}`;
   }
   return `- ${wf.name}: ${wf.description}${paramHint}`;
+};
+
+const getTabUrl = async (tabId?: number): Promise<string> => {
+  if (typeof chrome === 'undefined' || !chrome.tabs || !tabId || !Number.isFinite(tabId)) return '';
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return tab?.url || '';
+  } catch {
+    return '';
+  }
 };
 
 /**
@@ -115,8 +130,6 @@ export const buildSkillContext = async (tabUrl: string): Promise<{
   }
 
   // 5. 构建 schema
-  const limited = domainWorkflows.slice(0, MAX_WORKFLOWS_IN_SCHEMA);
-
   // description 中列出域级可直接 run 的 workflow + 提示全局需 detail
   const descParts: string[] = [
     '预定义技能工作流。支持三种操作：',
@@ -126,11 +139,11 @@ export const buildSkillContext = async (tabUrl: string): Promise<{
     '**action=list**：列出所有可用技能。',
   ];
 
-  if (limited.length > 0) {
+  if (domainWorkflows.length > 0) {
     descParts.push('');
     descParts.push('当前页面可直接 run 的工作流：');
-    for (const { wf } of limited) {
-      descParts.push(buildWorkflowDescription(wf));
+    for (const { skill, wf } of domainWorkflows) {
+      descParts.push(`${buildWorkflowDescription(wf)} | workflow_id=${buildWorkflowId(skill.name, wf.name)}`);
     }
   }
 
@@ -143,7 +156,7 @@ export const buildSkillContext = async (tabUrl: string): Promise<{
   }
 
   // name enum 只包含域级 workflow（全局需 detail 后才知道具体 name）
-  const domainWfNames = limited.map(({ wf }) => wf.name);
+  const domainWfNames = domainWorkflows.map(({ wf }) => wf.name);
 
   const schema: ToolSchema = {
     type: 'function',
@@ -160,7 +173,11 @@ export const buildSkillContext = async (tabUrl: string): Promise<{
         name: {
           type: 'string',
           ...(domainWfNames.length > 0 ? {} : {}), // 不设 enum，允许全局 workflow 名称
-          description: 'action=run 时为工作流名称，action=detail 时为技能名称',
+          description: 'action=run 时为工作流名称，action=detail 时为技能名称。兼容 workflow_id 形式的唯一标识。',
+        },
+        workflow_id: {
+          type: 'string',
+          description: 'action=run 时可传 workflow_id（格式为 skillName::workflowName 的编码值），优先于 name，适合避免重名冲突。',
         },
         params: {
           type: 'object',
@@ -195,7 +212,12 @@ const handleList = async (tabUrl?: string): Promise<FunctionResult> => {
     description: s.description,
     scope: s.scope,
     workflowCount: s.workflows.length,
-    workflows: s.workflows.map(w => w.name),
+    workflows: s.workflows.map(w => ({
+      id: buildWorkflowId(s.name, w.name),
+      name: w.name,
+      label: w.label,
+      description: w.description,
+    })),
   }));
 
   return {
@@ -217,6 +239,7 @@ const handleDetail = async (skillName: string): Promise<FunctionResult> => {
   }
 
   const workflowDetails = skill.workflows.map(wf => ({
+    id: buildWorkflowId(skill.name, wf.name),
     name: wf.name,
     label: wf.label,
     description: wf.description,
@@ -242,32 +265,28 @@ const handleRun = async (
   rawParams: Record<string, unknown>,
   context?: ToolExecutionContext,
 ): Promise<FunctionResult> => {
-  const workflowName = String(rawParams?.name || '').trim();
-  if (!workflowName) {
+  const workflowReference = String(rawParams?.workflow_id || rawParams?.name || '').trim();
+  if (!workflowReference) {
     return { success: false, error: '缺少 workflow 名称' };
   }
 
-  // 在所有 Skill 中查找 workflow
-  await ensureSkillRegistryReady();
-  const allSkills = await listAllSkills();
-  let targetWorkflow: WorkflowEntry | null = null;
+  const explicitTabId = typeof rawParams.tab_id === 'number' && Number.isFinite(rawParams.tab_id)
+    ? rawParams.tab_id
+    : undefined;
+  const effectiveTabId = explicitTabId ?? context?.tabId;
+  const tabUrl = await getTabUrl(effectiveTabId);
+  const resolved = await resolveWorkflowReference(workflowReference, tabUrl);
 
-  for (const skill of allSkills) {
-    if (!skill.enabled) continue;
-    const found = skill.workflows.find(w => w.name === workflowName);
-    if (found) {
-      targetWorkflow = found;
-      break;
-    }
-  }
-
-  if (!targetWorkflow) {
-    return { success: false, error: `工作流不存在：${workflowName}。请先用 skill(action="list") 查看可用工作流` };
+  if (!resolved) {
+    return {
+      success: false,
+      error: `工作流不存在：${workflowReference}。请先用 skill(action="list") 查看可用工作流`,
+    };
   }
 
   // 合并参数：schema 默认值 < 顶层参数 < params 嵌套参数
-  const defaults = extractDefaults(targetWorkflow.parameters);
-  const { action: _a, name: _n, params: nested, tab_id: _t, ...topLevel } = rawParams || {};
+  const defaults = extractDefaults(resolved.parameters);
+  const { action: _a, name: _n, workflow_id: _wid, params: nested, tab_id: _t, ...topLevel } = rawParams || {};
   const nestedParams = nested && typeof nested === 'object' && !Array.isArray(nested)
     ? nested as Record<string, unknown>
     : {};
@@ -276,15 +295,13 @@ const handleRun = async (
   // 构建最终 context：tab_id 参数优先于 context.tabId
   const effectiveContext: ToolExecutionContext = {
     ...context,
-    tabId: (typeof rawParams.tab_id === 'number' && Number.isFinite(rawParams.tab_id))
-      ? rawParams.tab_id
-      : context?.tabId,
+    tabId: effectiveTabId,
     signal: context?.signal,
   };
 
   return executeDebugRemotePlan(
-    workflowName,
-    targetWorkflow.plan,
+    resolved.workflowId,
+    resolved.workflow.plan,
     mergedParams,
     effectiveContext,
   );
@@ -311,7 +328,11 @@ export const skillFunction: FunctionDefinition = {
       },
       name: {
         type: 'string',
-        description: 'run 时为工作流名称，detail 时为技能名称',
+        description: 'run 时为工作流名称或 workflow_id，detail 时为技能名称',
+      },
+      workflow_id: {
+        type: 'string',
+        description: 'run 时为 workflow_id，优先于 name，用于精确命中某个工作流',
       },
       params: {
         type: 'object',
@@ -326,14 +347,26 @@ export const skillFunction: FunctionDefinition = {
   },
 
   execute: async (
-    rawParams: { action?: string; name?: string; params?: Record<string, unknown>; tab_id?: number; [key: string]: unknown },
+    rawParams: {
+      action?: string;
+      name?: string;
+      workflow_id?: string;
+      params?: Record<string, unknown>;
+      tab_id?: number;
+      [key: string]: unknown;
+    },
     context?: ToolExecutionContext,
   ): Promise<FunctionResult> => {
     const action = String(rawParams?.action || 'run').trim().toLowerCase();
 
     switch (action) {
-      case 'list':
-        return handleList();
+      case 'list': {
+        const effectiveTabId = typeof rawParams.tab_id === 'number' && Number.isFinite(rawParams.tab_id)
+          ? rawParams.tab_id
+          : context?.tabId;
+        const tabUrl = await getTabUrl(effectiveTabId);
+        return handleList(tabUrl || undefined);
+      }
 
       case 'detail': {
         const skillName = String(rawParams?.name || '').trim();

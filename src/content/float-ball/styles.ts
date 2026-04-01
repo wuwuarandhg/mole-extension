@@ -2672,53 +2672,286 @@ export const getStyles = () => `
   /* ===== Workflow 快捷操作卡片 ===== */
 
   .mole-workflow-hints {
-    padding: 10px 14px 8px;
+    padding: 12px 14px 10px;
   }
 
-  .mole-workflow-hints-title {
-    font-size: 10px;
-    color: #b0b0b4;
-    margin-bottom: 6px;
-    font-weight: 500;
-    letter-spacing: 0.03em;
-  }
-
-  .mole-workflow-chips {
+  .mole-workflow-hints-head,
+  .mole-workflow-form-head {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
   }
 
-  .mole-workflow-chip {
+  .mole-workflow-panel-headline {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .mole-workflow-hints-title,
+  .mole-workflow-form-title {
+    font-size: 12px;
+    color: #475467;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .mole-workflow-panel-subtitle {
+    font-size: 10px;
+    color: #98a2b3;
+    line-height: 1.4;
+  }
+
+  .mole-workflow-hints-count {
+    font-size: 11px;
+    color: #98a2b3;
+  }
+
+  .mole-workflow-automation-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .mole-workflow-auto-btn {
+    flex: 1;
+    border: none;
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: linear-gradient(135deg, #1677ff, #0f5bd8);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 10px 28px rgba(22, 119, 255, 0.18);
+  }
+
+  .mole-workflow-auto-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  .mole-workflow-auto-note {
+    margin-bottom: 10px;
+    border-radius: 10px;
+    background: rgba(248, 250, 252, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    padding: 9px 11px;
+    font-size: 11px;
+    color: #475467;
+    line-height: 1.45;
+  }
+
+  .mole-workflow-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mole-workflow-item {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(248, 250, 252, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+    text-align: left;
+  }
+
+  .mole-workflow-item:hover {
+    border-color: rgba(22, 119, 255, 0.35);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .mole-workflow-item:active {
+    transform: translateY(0);
+  }
+
+  .mole-workflow-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .mole-workflow-item-label {
+    font-weight: 500;
+    font-size: 12px;
+    color: #344054;
+  }
+
+  .mole-workflow-pill {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 5px 10px;
+    justify-content: center;
+    padding: 2px 8px;
     border-radius: 999px;
-    background: rgba(241, 244, 248, 0.8);
+    background: rgba(15, 23, 42, 0.06);
+    color: #667085;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .mole-workflow-pill.ready {
+    background: rgba(22, 163, 74, 0.12);
+    color: #15803d;
+  }
+
+  .mole-workflow-item-desc {
+    font-size: 11px;
+    color: #667085;
+    line-height: 1.45;
+  }
+
+  .mole-workflow-item-meta {
+    font-size: 10px;
+    color: #98a2b3;
+  }
+
+  .mole-workflow-form-desc {
+    font-size: 11px;
+    color: #667085;
+    line-height: 1.45;
+    margin-bottom: 12px;
+  }
+
+  .mole-workflow-form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .mole-workflow-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .mole-workflow-field-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #344054;
+    font-weight: 600;
+  }
+
+  .mole-workflow-field-required {
+    color: #d92d20;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .mole-workflow-field-desc {
+    font-size: 10px;
+    color: #98a2b3;
+  }
+
+  .mole-workflow-field-input {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: #fff;
+    color: #101828;
+    padding: 8px 10px;
+    font-size: 12px;
+    outline: none;
+    box-sizing: border-box;
+  }
+
+  .mole-workflow-field-input:focus {
+    border-color: rgba(22, 119, 255, 0.45);
+    box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.1);
+  }
+
+  .mole-workflow-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #475467;
+  }
+
+  .mole-workflow-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+  }
+
+  .mole-workflow-run-btn,
+  .mole-workflow-back-btn {
     border: none;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
+    border-radius: 10px;
+    padding: 8px 12px;
     font-size: 11px;
-    line-height: 1.4;
+    font-weight: 600;
+  }
+
+  .mole-workflow-run-btn {
+    background: linear-gradient(135deg, #1677ff, #0f5bd8);
+    color: #fff;
+  }
+
+  .mole-workflow-back-btn {
+    background: rgba(15, 23, 42, 0.06);
+    color: #475467;
+  }
+
+  .mole-workflow-form-empty {
+    border-radius: 10px;
+    background: rgba(248, 250, 252, 0.95);
+    border: 1px dashed rgba(148, 163, 184, 0.3);
+    padding: 10px 12px;
+    font-size: 11px;
     color: #667085;
   }
 
-  .mole-workflow-chip:hover {
-    background: rgba(22, 119, 255, 0.08);
-    color: #1677ff;
+  .mole-workflow-run-banner {
+    margin-bottom: 12px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(240, 249, 255, 0.96), rgba(248, 250, 252, 0.96));
+    border: 1px solid rgba(14, 116, 144, 0.14);
+    padding: 10px 12px;
   }
 
-  .mole-workflow-chip:active {
-    background: rgba(22, 119, 255, 0.14);
+  .mole-workflow-run-banner-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
   }
 
-  .mole-workflow-chip-label {
-    font-weight: 500;
+  .mole-workflow-run-banner-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f172a;
   }
 
-  .mole-workflow-chip-desc {
-    display: none;
+  .mole-workflow-run-banner-meta,
+  .mole-workflow-run-banner-note {
+    font-size: 11px;
+    line-height: 1.45;
+    color: #475467;
+  }
+
+  .mole-workflow-run-banner-note {
+    margin-top: 6px;
+    color: #b54708;
   }
 
   @media (prefers-reduced-motion: reduce) {
