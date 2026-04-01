@@ -2889,6 +2889,56 @@ Channel.on('__show_notification', (data, _sender, sendResponse) => {
 });
 
 /**
+ * 获取网页标题（link preview 用）
+ * content script 请求 → background fetch → 提取 <title> → 返回
+ */
+const pageTitleCache = new Map<string, string>();
+
+Channel.on('__fetch_page_title', async (data, _sender, sendResponse) => {
+    const url = data?.url;
+    if (!url || !sendResponse) return true;
+
+    // 缓存命中
+    const cached = pageTitleCache.get(url);
+    if (cached !== undefined) {
+        sendResponse({ title: cached });
+        return true;
+    }
+
+    try {
+        const resp = await fetch(url, {
+            headers: { 'Accept': 'text/html' },
+            signal: AbortSignal.timeout(5000),
+        });
+        // 只读前 16KB 提取 title，避免下载整页
+        const reader = resp.body?.getReader();
+        if (!reader) { sendResponse({}); return true; }
+
+        let text = '';
+        const decoder = new TextDecoder();
+        while (text.length < 16384) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            text += decoder.decode(value, { stream: true });
+            const match = text.match(/<title[^>]*>([^<]+)<\/title>/i);
+            if (match) {
+                reader.cancel().catch(() => {});
+                const title = match[1].trim().replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+                pageTitleCache.set(url, title);
+                sendResponse({ title });
+                return true;
+            }
+        }
+        reader.cancel().catch(() => {});
+        pageTitleCache.set(url, '');
+        sendResponse({});
+    } catch {
+        sendResponse({});
+    }
+    return true;
+});
+
+/**
  * 打开扩展设置页（options.html）
  */
 Channel.on('__open_options_page', (_data, _sender, sendResponse) => {

@@ -56,7 +56,7 @@ export const tabNavigateFunction: FunctionDefinition = {
       },
       keep_alive: {
         type: 'boolean',
-        description: '为 true 时标记此标签页在任务结束后保留，不自动关闭。仅 action=open/duplicate 时生效。默认 false（任务结束自动关闭）',
+        description: '默认 false（任务结束自动关闭）。几乎不需要设为 true。仅当用户明确说"打开给我看"/"帮我打开这个网页"等需要保留页面的场景才设为 true。工作过程中打开的临时标签页（搜索、查资料、采集数据）绝对不要设为 true',
       },
     },
     required: ['action'],

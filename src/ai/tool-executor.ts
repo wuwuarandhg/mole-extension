@@ -9,114 +9,80 @@ import { mcpClient, getBuiltinFunction } from '../functions/registry';
 import { truncateToolResult, getTextContent } from './context-manager';
 import { requestConfirmationFunction } from '../functions/request-confirmation';
 
-/** 统一子 agent 执行器类型（由 orchestrator 注入，实现递归） */
-export type SubagentRunner = (goal: string, signal?: AbortSignal) => Promise<InputItem[]>;
+/** Agent 执行器类型（由 orchestrator 注入） */
+export type AgentRunner = (params: {
+  type?: string;
+  goal: string;
+  tab_id?: number;
+}, signal?: AbortSignal) => Promise<{ success: boolean; summary: string; agentId: string }>;
 
-/** 子 agent 配置 */
-interface SubagentConfig {
-  /** 工具 schema 定义 */
-  schema: ToolSchema;
-  /** thinking 事件的前缀文案 */
-  thinkingPrefix: string;
-  /** 执行失败时的默认错误消息 */
-  defaultErrorMessage: string;
-  /** 执行成功但无输出时的默认消息 */
-  defaultEmptyMessage: string;
-}
+// ============ 统一 Agent 工具定义 ============
 
-/** 子 agent 配置注册表 */
-const SUBAGENT_CONFIGS: Record<string, SubagentConfig> = {
-  spawn_subtask: {
-    schema: {
-      type: 'function',
-      name: 'spawn_subtask',
-      description: '将一个独立的子目标拆分为隔离任务执行。子任务有自己独立的上下文，完成后返回结果摘要。适用于：任务包含多个互不依赖的子目标、需要跨多个网页分别操作、当前上下文已经很长需要隔离执行。不要用于简单的单步操作。',
-      parameters: {
-        type: 'object',
-        properties: {
-          goal: {
-            type: 'string',
-            description: '子任务的目标描述，要具体明确，包含必要的上下文信息',
-          },
-        },
-        required: ['goal'],
+/** 统一 agent 工具 Schema（替代旧的 4 个独立子 agent 工具） */
+const AGENT_TOOL_SCHEMA: ToolSchema = {
+  type: 'function',
+  name: 'agent',
+  description: [
+    '启动子 Agent 执行独立任务。支持并行：可同时启动多个 Agent 在不同标签页工作。',
+    '',
+    '预定义类型：',
+    '- explore：只读侦察页面结构和交互元素',
+    '- plan：分析任务并制定执行计划',
+    '- review：独立验证操作结果',
+    '- subtask：执行独立子目标（可使用大部分工具）',
+    '',
+    '⚠️ 不要用此工具来：',
+    '- 简单的单步查询（直接用 page_viewer 等工具）',
+    '- 需要当前完整上下文的操作（Agent 上下文是隔离的）',
+  ].join('\n'),
+  parameters: {
+    type: 'object',
+    properties: {
+      type: {
+        type: 'string',
+        enum: ['explore', 'plan', 'review', 'subtask'],
+        description: '预定义 Agent 类型',
+      },
+      goal: {
+        type: 'string',
+        description: '任务目标描述，要具体明确',
+      },
+      tab_id: {
+        type: 'number',
+        description: '目标标签页 ID。不传则继承父 Agent 的 tab',
       },
     },
-    thinkingPrefix: '正在处理子任务',
-    defaultErrorMessage: '子任务执行失败',
-    defaultEmptyMessage: '子任务已完成但无明确输出',
-  },
-  explore: {
-    schema: {
-      type: 'function',
-      name: 'explore',
-      description: '启动探索子 agent 侦察页面结构和交互元素。探索 agent 在独立上下文中运行，只做观察不做写入操作，返回页面分析摘要和建议执行步骤。适合：首次访问陌生页面、需要了解页面结构再制定计划、复杂表单/流程的前期侦察。',
-      parameters: {
-        type: 'object',
-        properties: {
-          goal: {
-            type: 'string',
-            description: '探索目标描述，说明你想了解什么（如"了解这个表单有哪些字段和提交按钮"、"查看搜索结果的结构和翻页方式"）',
-          },
-        },
-        required: ['goal'],
-      },
-    },
-    thinkingPrefix: '正在探索',
-    defaultErrorMessage: '探索执行失败',
-    defaultEmptyMessage: '探索已完成但无明确输出',
-  },
-  plan: {
-    schema: {
-      type: 'function',
-      name: 'plan',
-      description: '启动规划子 agent 分析任务并制定执行计划。规划 agent 在独立上下文中观察页面、拆解目标，返回可直接用于 todo 的结构化步骤。适合：复杂多步任务开始前的整体规划、不确定最佳路径时的方案评估、需要根据页面现状调整策略时。',
-      parameters: {
-        type: 'object',
-        properties: {
-          goal: {
-            type: 'string',
-            description: '需要规划的任务目标，说明你想完成什么（如"在携程上订一张下周五北京到上海的高铁票"、"把这个表格的数据导出为 CSV 文件"）',
-          },
-        },
-        required: ['goal'],
-      },
-    },
-    thinkingPrefix: '正在规划',
-    defaultErrorMessage: '规划执行失败',
-    defaultEmptyMessage: '规划已完成但无明确输出',
-  },
-  review: {
-    schema: {
-      type: 'function',
-      name: 'review',
-      description: '启动独立审查 agent 验证操作结果。审查 agent 用干净上下文重新观察页面实际状态，对比预期结果，返回结构化的通过/未通过判定。适合：关键操作后验证（表单提交、数据提取、页面跳转）、多步任务的阶段性检查。不要用于简单的信息查询。',
-      parameters: {
-        type: 'object',
-        properties: {
-          goal: {
-            type: 'string',
-            description: '审查目标，说明预期状态和需要验证的内容（如"验证表单是否提交成功，页面应显示订单确认信息"、"检查搜索结果是否包含 AirPods Pro 的价格信息"）',
-          },
-        },
-        required: ['goal'],
-      },
-    },
-    thinkingPrefix: '正在审查',
-    defaultErrorMessage: '审查执行失败',
-    defaultEmptyMessage: '审查已完成但无明确输出',
+    required: ['goal'],
   },
 };
 
-/** 返回所有注册的子 agent 名称列表 */
-export const getSubagentNames = (): string[] => Object.keys(SUBAGENT_CONFIGS);
+/** 旧工具名 → agent type 映射（向后兼容） */
+const LEGACY_AGENT_MAP: Record<string, string> = {
+  spawn_subtask: 'subtask',
+  explore: 'explore',
+  plan: 'plan',
+  review: 'review',
+};
 
-/** 返回所有子 agent 的 schema */
-export const getSubagentSchemas = (): ToolSchema[] =>
-  Object.values(SUBAGENT_CONFIGS).map(config => config.schema);
+/** Agent 类型 → thinking 前缀 */
+const AGENT_THINKING_PREFIX: Record<string, string> = {
+  explore: '正在探索',
+  plan: '正在规划',
+  review: '正在审查',
+  subtask: '正在处理子任务',
+};
 
-/** 判断是否是子 agent 工具 */
-export const isSubagent = (name: string): boolean => name in SUBAGENT_CONFIGS;
+/** 判断是否是 agent 相关工具（含旧名别名） */
+export const isAgentTool = (name: string): boolean =>
+  name === 'agent' || name === 'send_message' || name in LEGACY_AGENT_MAP;
+
+/** 返回 agent 工具的 schema 列表 */
+export const getAgentSchemas = (): ToolSchema[] => [AGENT_TOOL_SCHEMA];
+
+// ── 向后兼容导出 ──
+export const getSubagentSchemas = getAgentSchemas;
+export const isSubagent = isAgentTool;
+export const getSubagentNames = (): string[] => ['agent', ...Object.keys(LEGACY_AGENT_MAP)];
 
 /** 执行组类型：并行组或串行组 */
 interface ExecutionGroup {
@@ -140,10 +106,9 @@ const buildExecutionGroups = async (calls: OutputFunctionCallItem[]): Promise<Ex
   };
 
   for (const call of calls) {
-    // 子 agent 始终串行
-    if (SUBAGENT_CONFIGS[call.name]) {
-      flushParallelGroup();
-      groups.push({ type: 'serial', calls: [call] });
+    // agent 工具支持并行执行（不再强制串行）
+    if (isAgentTool(call.name)) {
+      currentParallelGroup.push(call);
       continue;
     }
 
@@ -177,7 +142,7 @@ export const executeToolCalls = async (
   tabId: number | undefined,
   signal: AbortSignal | undefined,
   emit: (event: AIStreamEvent) => void,
-  subagentRunners?: Record<string, SubagentRunner>,
+  agentRunner?: AgentRunner,
 ): Promise<InputItem[]> => {
   const results: InputItem[] = [];
 
@@ -268,26 +233,35 @@ export const executeToolCalls = async (
     const params = safeParseArgs(call.arguments);
     let output: string;
 
-    const subagentConfig = SUBAGENT_CONFIGS[call.name];
-    const runner = subagentRunners?.[call.name];
-    if (subagentConfig && runner) {
-      // 统一子 agent 执行
+    if (isAgentTool(call.name) && call.name !== 'send_message') {
+      // 统一 Agent 执行（含旧工具名别名映射）
+      const agentType = call.name === 'agent'
+        ? (params.type || 'subtask')
+        : LEGACY_AGENT_MAP[call.name];
       const goal = String(params.goal || '');
-      emit({ type: 'thinking', content: `${subagentConfig.thinkingPrefix}：${goal.slice(0, 60)}` });
+      const targetTabId = params.tab_id as number | undefined;
+      const prefix = AGENT_THINKING_PREFIX[agentType] || '正在执行 Agent';
+      emit({ type: 'thinking', content: `${prefix}：${goal.slice(0, 60)}` });
 
-      try {
-        const subContext = await runner(goal, signal);
-        const lastReply = extractLastAssistantReply(subContext);
-        output = JSON.stringify({
-          success: true,
-          data: { summary: lastReply || subagentConfig.defaultEmptyMessage },
-        });
-      } catch (err: any) {
-        output = JSON.stringify({
-          success: false,
-          error: err?.message || subagentConfig.defaultErrorMessage,
-        });
+      if (!agentRunner) {
+        output = JSON.stringify({ success: false, error: 'Agent 执行器未注入' });
+      } else {
+        try {
+          const result = await agentRunner({ type: agentType, goal, tab_id: targetTabId }, signal);
+          output = JSON.stringify({
+            success: result.success,
+            data: { summary: result.summary, agentId: result.agentId },
+          });
+        } catch (err: any) {
+          output = JSON.stringify({
+            success: false,
+            error: err?.message || 'Agent 执行失败',
+          });
+        }
       }
+    } else if (call.name === 'send_message') {
+      // send_message 消息投递（Phase 3 完善）
+      output = JSON.stringify({ success: false, error: 'send_message 尚未实现' });
     } else {
       // 常规工具执行
       try {
@@ -428,7 +402,7 @@ const safeParseArgs = (raw: string): Record<string, any> => {
 };
 
 /** 从上下文中提取最后一条助手回复 */
-const extractLastAssistantReply = (context: InputItem[]): string => {
+export const extractLastAssistantReply = (context: InputItem[]): string => {
   for (let i = context.length - 1; i >= 0; i--) {
     const item = context[i];
     if ('role' in item && item.role === 'assistant') {

@@ -28,8 +28,10 @@ import type {
 import { ArtifactStore } from '../lib/artifact-store';
 import { chatStream, chatComplete } from './llm-client';
 import { compactContext, getTextContent, microCompact, estimateContextTokens, stripImagesFromContent } from './context-manager';
-import { executeToolCalls, getSubagentSchemas, isSubagent, resetSensitiveAccessTrust } from './tool-executor';
-import type { SubagentRunner } from './tool-executor';
+import { executeToolCalls, getSubagentSchemas, isAgentTool, extractLastAssistantReply, resetSensitiveAccessTrust } from './tool-executor';
+import type { AgentRunner } from './tool-executor';
+import { AgentRegistry } from './agent-registry';
+import type { AgentDefinition } from './agent-registry';
 import { buildSystemPrompt, buildSubtaskPrompt, buildExplorePrompt, buildReviewPrompt, buildPlanPrompt } from './system-prompt';
 import { ensureToolRegistryReady, mcpClient } from '../functions/registry';
 import { mcpToolsToSchema } from '../mcp/adapters';
@@ -606,6 +608,7 @@ const agenticLoop = async (
   todoFn?: ReturnType<typeof createTodoFunction>,
   phaseControl?: PhaseControl,
   tabTracker?: TabTracker,
+  registry?: AgentRegistry,
 ): Promise<InputItem[]> => {
   let round = 0;
   let totalToolCalls = 0;
@@ -728,39 +731,75 @@ const agenticLoop = async (
         break;
       }
 
-      // ── 机制：构建子 agent runners ──
-      const subagentRunners: Record<string, SubagentRunner> = {};
-      for (const [name, config] of Object.entries(SUBAGENT_LOOP_CONFIGS)) {
-        // 检查递归深度限制
-        // - 未指定 maxSubtaskDepth 的子 agent（如 spawn_subtask）：继承父预算的 depth 限制
-        // - maxSubtaskDepth === 0 的子 agent（如 explore）：始终可用，但其内部不会再产生子 agent
+      // ── 机制：构建统一 Agent runner ──
+      const effectiveRegistry = registry || new AgentRegistry();
+
+      const agentRunner: AgentRunner = async (params, runnerSignal) => {
+        const { type: agentType = 'subtask', goal, tab_id: targetTabId } = params;
+        // 旧名映射：subtask → spawn_subtask（SUBAGENT_LOOP_CONFIGS 中的 key）
+        const configName = agentType === 'subtask' ? 'spawn_subtask' : agentType;
+        const config = SUBAGENT_LOOP_CONFIGS[configName];
+
+        if (!config) {
+          return { success: false, summary: `未知的 Agent 类型: ${agentType}`, agentId: '' };
+        }
+
+        // 深度检查（与旧逻辑一致）
         const configDepth = config.budget.maxSubtaskDepth;
         if (configDepth === undefined || configDepth > 0) {
-          // 继承父预算深度限制
           const effectiveDepth = configDepth ?? budget.maxSubtaskDepth;
-          if (depth >= effectiveDepth) continue;
+          if (depth >= effectiveDepth) {
+            return { success: false, summary: '已达最大嵌套深度', agentId: '' };
+          }
         }
-        // configDepth === 0：始终创建 runner（不受 depth 限制）
 
-        subagentRunners[name] = (goal: string, runnerSignal?: AbortSignal) => {
+        // Tab 冲突检查：写操作 Agent 不能共享同一 tab
+        const effectiveTabId = targetTabId || tabId;
+        if (effectiveTabId && effectiveRegistry.hasWriteAgentOnTab(effectiveTabId)) {
+          if (!AgentRegistry.isReadOnly(agentType)) {
+            return { success: false, summary: '该标签页已有其他 Agent 在操作', agentId: '' };
+          }
+        }
+
+        // 创建 Agent 实例
+        const def: AgentDefinition = {
+          type: agentType,
+          description: `${agentType} agent`,
+          buildPrompt: config.buildPrompt,
+          toolFilter: config.toolFilter,
+          budget: config.budget,
+        };
+        const instance = effectiveRegistry.create(def, undefined, effectiveTabId);
+
+        try {
           const subContext: InputItem[] = [{ role: 'user' as const, content: goal }];
           const subTools = config.toolFilter
             ? tools.filter(t => config.toolFilter!(t.name))
-            : tools.filter(t => !isSubagent(t.name));
-          // 预算合并：config.budget 中的数值字段使用 Math.min 取较小值（保持与重构前一致的行为）
+            : tools.filter(t => !isAgentTool(t.name));
+
+          // 预算合并：config.budget 中的数值字段使用 Math.min 取较小值
           const mergedBudget: Partial<LoopBudget> = {};
           for (const [key, value] of Object.entries(config.budget)) {
             const budgetKey = key as keyof LoopBudget;
             mergedBudget[budgetKey] = Math.min(budget[budgetKey], value as number);
           }
           const subBudget: LoopBudget = { ...budget, ...mergedBudget };
-          return agenticLoop(
+
+          const resultContext = await agenticLoop(
             subContext, subTools, config.buildPrompt(), subBudget,
-            tabId, runnerSignal || signal, emit, undefined, depth + 1,
+            effectiveTabId, runnerSignal || signal, emit, undefined, depth + 1,
             undefined, undefined, undefined, tabTracker,
+            effectiveRegistry,
           );
-        };
-      }
+
+          const summary = extractLastAssistantReply(resultContext) || 'Agent 已完成但无明确输出';
+          effectiveRegistry.updateStatus(instance.id, 'completed', summary);
+          return { success: true, summary, agentId: instance.id };
+        } catch (err: any) {
+          effectiveRegistry.updateStatus(instance.id, 'failed', err?.message);
+          return { success: false, summary: err?.message || 'Agent 执行失败', agentId: instance.id };
+        }
+      };
 
       // ── 机制：拦截 todo / compact 调用，本地执行 ──
       const regularCalls: OutputFunctionCallItem[] = [];
@@ -887,7 +926,7 @@ const agenticLoop = async (
 
       // 执行剩余常规工具
       if (regularCalls.length > 0) {
-        const results = await executeToolCalls(regularCalls, tabId, signal, emit, subagentRunners);
+        const results = await executeToolCalls(regularCalls, tabId, signal, emit, agentRunner);
         for (const r of results) context.push(r);
 
         // 追踪标签页打开/关闭
@@ -1578,6 +1617,7 @@ export const handleChat = async (
 
   // 标签页生命周期追踪：任务结束后自动关闭 AI 打开的标签页
   const tabTracker = new TabTracker();
+  await tabTracker.startListening(); // 隐式追踪：监听 tabs.onCreated 捕获间接打开的标签页
   try {
     return await phaseOrchestrator(
       query, tools, systemPrompt, budget,
@@ -1585,7 +1625,7 @@ export const handleChat = async (
       previousContext, todoManager, todoFn, tabTracker,
     );
   } finally {
-    // 无论成功/失败/取消，都清理 AI 打开的标签页
+    // 无论成功/失败/取消，都清理 AI 打开的标签页（closeAll 内部会 stopListening）
     await tabTracker.closeAll();
   }
 };

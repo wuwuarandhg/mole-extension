@@ -1871,6 +1871,51 @@ export const getStyles = () => `
     color: #3b4963;
   }
 
+  .mole-answer img.mole-md-img {
+    max-width: 70%;
+    max-height: 280px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 8px;
+    margin: 8px 0;
+    display: block;
+  }
+
+  .mole-link-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px 3px 6px;
+    margin: 2px 0;
+    border-radius: 6px;
+    background: rgba(109, 40, 217, 0.06);
+    border: 1px solid rgba(109, 40, 217, 0.12);
+    color: #5b21b6 !important;
+    text-decoration: none !important;
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 100%;
+    overflow: hidden;
+    transition: background 0.15s, border-color 0.15s;
+    word-break: break-all;
+  }
+  .mole-link-chip:hover {
+    background: rgba(109, 40, 217, 0.12);
+    border-color: rgba(109, 40, 217, 0.25);
+  }
+  .mole-link-favicon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    border-radius: 2px;
+  }
+  .mole-link-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .mole-answer hr {
     border: none;
     height: 1px;

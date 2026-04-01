@@ -1985,6 +1985,23 @@ export const initFloatBall = async () => {
     resultEl.appendChild(roundHistory);
   };
 
+  /** 异步获取 link chip 的页面标题 */
+  const fetchLinkTitles = (container: HTMLElement) => {
+    const chips = container.querySelectorAll<HTMLAnchorElement>('a.mole-link-chip');
+    for (const chip of chips) {
+      const url = chip.dataset.url;
+      if (!url) continue;
+      Channel.send('__fetch_page_title', { url }, (resp: any) => {
+        if (resp?.title && chip.isConnected) {
+          const textEl = chip.querySelector('.mole-link-text');
+          if (textEl) {
+            textEl.textContent = resp.title;
+          }
+        }
+      });
+    }
+  };
+
   const updateAnswer = (text: string) => {
     // 查找当前轮次的 answer 元素（排除已冻结的历史轮次）
     let answerEl = resultEl.querySelector('.mole-answer:not(.frozen)');
@@ -1995,6 +2012,8 @@ export const initFloatBall = async () => {
       showResult();
     }
     answerEl.innerHTML = markdownToHtml(text);
+    // 异步获取链接标题（link chip 升级）
+    fetchLinkTitles(answerEl as HTMLElement);
     resultEl.scrollTop = resultEl.scrollHeight;
   };
 
@@ -3216,21 +3235,24 @@ export const initFloatBall = async () => {
   Channel.on('__approval_cancel', (data: any) => {
     handleApprovalCancel(data?.requestId);
   });
-  // 确认卡片跨标签页同步：用户在其他 tab 响应后，本 tab 卡片同步更新
+  // 确认卡片跨标签页同步：用户在其他 tab 响应后，本 tab 卡片直接移除
   Channel.on('__approval_settled', (data: any) => {
-    const { requestId, approved, trustAll } = data || {};
+    const { requestId } = data || {};
     if (!requestId) return;
     const card = resultEl.querySelector(
       `.mole-approval-card[data-request-id="${requestId}"]`,
     ) as HTMLElement;
-    if (card && !card.classList.contains('settled')) {
-      disableApprovalCard(card, !!approved);
-      if (trustAll) {
-        const headerSpan = card.closest('.mole-approval-standalone')
-          ?.querySelector('.mole-approval-header-bar span');
-        if (headerSpan) headerSpan.textContent = '已批准（本次不再询问）';
-      }
+    if (!card) return;
+    // 移除整个独立卡片容器（含标题栏）
+    const standalone = card.closest('.mole-approval-standalone') as HTMLElement;
+    if (standalone) {
+      standalone.remove();
+    } else {
+      card.remove();
     }
+    // 收起悬浮球迷你操作卡片
+    hidePillActionCard();
+    saveSnapshot();
   });
 
   // 截图时临时隐藏/恢复悬浮球，避免遮挡页面内容
@@ -3752,8 +3774,15 @@ export const initFloatBall = async () => {
       return;
     }
 
-    // 5. 搜索结果卡片点击跳转
-    if ((target as HTMLElement).tagName === 'A') return;
+    // 5. 链接点击 — Shadow DOM 内需手动 window.open
+    const anchor = target.closest('a') as HTMLAnchorElement | null;
+    if (anchor?.href) {
+      e.preventDefault();
+      window.open(anchor.href, '_blank');
+      return;
+    }
+
+    // 6. 搜索结果卡片点击跳转
     const card = target.closest('.mole-result-card') as HTMLElement | null;
     if (card) {
       const url = card.getAttribute('data-url');

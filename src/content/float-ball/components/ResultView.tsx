@@ -8,6 +8,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useMole } from '../context/useMole';
 import { markdownToHtml } from '../markdown';
+import Channel from '../../../lib/channel';
 import {
   sanitizeUserFacingRuntimeText,
   clipRuntimeText,
@@ -203,6 +204,21 @@ export const ResultView: React.FC = () => {
       const newChild = temp.children[i].cloneNode(true) as HTMLElement;
       newChild.classList.add('mole-answer-new');
       el.appendChild(newChild);
+    }
+
+    // 异步获取 link chip 的页面标题
+    const chips = el.querySelectorAll<HTMLAnchorElement>('a.mole-link-chip');
+    for (const chip of chips) {
+      if (chip.dataset.titleFetched) continue;
+      chip.dataset.titleFetched = '1';
+      const url = chip.dataset.url;
+      if (!url) continue;
+      Channel.send('__fetch_page_title', { url }, (resp: any) => {
+        if (resp?.title && chip.isConnected) {
+          const textEl = chip.querySelector('.mole-link-text');
+          if (textEl) textEl.textContent = resp.title;
+        }
+      });
     }
   }, [task?.lastAIText, task?.id]);
 
